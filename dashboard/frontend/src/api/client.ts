@@ -8,7 +8,7 @@ import type {
   Capabilities, ComparisonPayload, ExperimentOptions, ExperimentStatus,
   FlowTablePayload, Health, LatencyPayload, LiveMetrics, LiveSnapshot,
   LiveStatus, MetricSeries, RunSummary, TopologyPayload, Verification,
-  Decision, DecodedState,
+  Decision, DecodedState, RewardExplain, RewardModel, MetricCatalog,
 } from "./types";
 
 export class ApiError extends Error {
@@ -90,6 +90,12 @@ export const api = {
     request<MetricSeries>(`/api/metrics/series${qs({ run_id: runId, limit })}`),
   latency: (runId?: string, windowS = 30) =>
     request<LatencyPayload>(`/api/metrics/latency${qs({ run_id: runId, window_s: windowS })}`),
+  rewardModel: (runId?: string) =>
+    request<RewardModel>(`/api/reward/model${qs({ run_id: runId })}`),
+  rewardExplain: (runId?: string, limit = 200) =>
+    request<RewardExplain>(`/api/reward/explain${qs({ run_id: runId, limit })}`),
+  metricCatalog: () => request<MetricCatalog>("/api/metrics/catalog"),
+
   events: (runId?: string, limit = 80) =>
     request<{ available: boolean; events: { t: number | null; kind: string; detail: string }[] }>(
       `/api/events${qs({ run_id: runId, limit })}`,

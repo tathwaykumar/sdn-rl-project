@@ -104,16 +104,7 @@ export function Card({
   bodyClassName?: string;
 }) {
   return (
-    <section
-      className={cx(
-        "rounded-xl border overflow-hidden flex flex-col",
-        className,
-      )}
-      style={{
-        background: "var(--surface-1)",
-        borderColor: "var(--border-1)",
-      }}
-    >
+    <section className={cx("panel overflow-hidden flex flex-col", className)}>
       {(title || right) && (
         <header
           className="flex items-start justify-between gap-3 px-4 py-3 border-b"
@@ -317,6 +308,8 @@ export function MetricCard({
   kind,
   source,
   tone,
+  direction,
+  explain,
 }: {
   label: string;
   value: ReactNode;
@@ -325,59 +318,67 @@ export function MetricCard({
   kind?: string;
   source?: DataSource | string | null;
   tone?: "ok" | "warn" | "bad";
+  /** Which way is desirable, shown so a reader need not guess. */
+  direction?: string;
+  /** One-line plain-English meaning, surfaced as a tooltip. */
+  explain?: string;
 }) {
-  const color =
-    tone === "bad"
+  const unavailable =
+    value === "N/A" || value === "—" || source === "unavailable";
+  const color = unavailable
+    ? "var(--text-4)"
+    : tone === "bad"
       ? "var(--bad)"
       : tone === "warn"
         ? "var(--warn)"
         : "var(--text-1)";
   return (
-    <div
-      className="rounded-xl border px-4 py-3 flex flex-col gap-1"
-      style={{ background: "var(--surface-1)", borderColor: "var(--border-1)" }}
-    >
+    <div className="panel panel-hover px-4 py-3 flex flex-col gap-1">
       <div className="flex items-center justify-between gap-2">
         <span
           className="text-[11px] font-medium truncate"
           style={{ color: "var(--text-2)" }}
-          title={label}
+          title={explain ?? label}
         >
           {label}
         </span>
         {source && <SourceBadge source={source} />}
       </div>
       <div className="flex items-baseline gap-1.5">
-        <span className="text-2xl font-semibold num" style={{ color }}>
+        <span className="text-2xl font-semibold num leading-tight" style={{ color }}>
           {value}
         </span>
-        {unit && (
+        {unit && !unavailable && (
           <span className="text-[11px]" style={{ color: "var(--text-3)" }}>
             {unit}
           </span>
         )}
       </div>
-      <div className="flex items-center justify-between gap-2">
-        {sub && (
-          <span className="text-[11px]" style={{ color: "var(--text-3)" }}>
-            {sub}
-          </span>
-        )}
-        {kind && (
-          <span
-            className="text-[10px] px-1 py-0.5 rounded"
-            style={{ background: "var(--surface-3)", color: "var(--text-3)" }}
-            title={
-              kind === "instantaneous"
-                ? "A single reading at one instant."
-                : kind === "interval_count"
-                  ? "A count accumulated over the polling interval."
-                  : "A rate averaged over the polling interval."
-            }
-          >
-            {kind === "instantaneous" ? "instant" : "interval"}
-          </span>
-        )}
+      <div className="flex items-center justify-between gap-2 mt-auto pt-0.5">
+        <span className="text-[11px] truncate" style={{ color: "var(--text-3)" }}>
+          {sub}
+        </span>
+        <span className="flex items-center gap-1.5 shrink-0">
+          <DirectionHint direction={direction} />
+          {kind && (
+            <span
+              className="text-[9.5px] px-1 py-0.5 rounded"
+              style={{ background: "var(--surface-3)", color: "var(--text-4)" }}
+              title={
+                kind === "instantaneous"
+                  ? "A single reading at one instant."
+                  : kind === "interval_count"
+                    ? "A count accumulated over the polling interval."
+                    : kind === "event"
+                      ? "Measured when a specific event occurs."
+                      : "A rate averaged over the polling interval."
+              }
+            >
+              {kind === "instantaneous" ? "instant"
+                : kind === "event" ? "event" : "interval"}
+            </span>
+          )}
+        </span>
       </div>
     </div>
   );
@@ -455,6 +456,75 @@ export const inputStyle = {
 
 export const inputClass =
   "px-2.5 py-1.5 rounded-lg border text-[12px] outline-none focus:ring-1 focus:ring-sky-600";
+
+/** Collapsible technical detail.
+ *
+ * Keeps the main view readable for someone meeting the project for the first
+ * time while leaving the exact mechanics one click away. Uses native
+ * <details> so it is keyboard accessible and works without JavaScript state.
+ */
+export function Details({
+  summary,
+  children,
+  defaultOpen,
+}: {
+  summary: string;
+  children: ReactNode;
+  defaultOpen?: boolean;
+}) {
+  return (
+    <details className="mt-2 group" open={defaultOpen}>
+      <summary
+        className="cursor-pointer text-[11px] font-medium select-none list-none
+                   inline-flex items-center gap-1.5 rounded px-1 -mx-1 py-0.5"
+        style={{ color: "var(--accent)" }}
+      >
+        <svg
+          width="10" height="10" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="3" strokeLinecap="round"
+          strokeLinejoin="round"
+          className="transition-transform group-open:rotate-90"
+          aria-hidden="true"
+        >
+          <path d="M9 6l6 6-6 6" />
+        </svg>
+        {summary}
+      </summary>
+      <div
+        className="mt-2 text-[11px] leading-relaxed rounded-lg border px-3 py-2"
+        style={{
+          color: "var(--text-2)",
+          borderColor: "var(--border-1)",
+          background: "var(--surface-0)",
+        }}
+      >
+        {children}
+      </div>
+    </details>
+  );
+}
+
+/** A compact label explaining which direction of a metric is desirable. */
+export function DirectionHint({ direction }: { direction?: string }) {
+  if (!direction || direction === "context") {
+    return (
+      <span className="text-[10px]" style={{ color: "var(--text-4)" }}
+            title="Neither direction is automatically better; it depends on context.">
+        context
+      </span>
+    );
+  }
+  const higher = direction === "higher_is_better";
+  return (
+    <span
+      className="text-[10px] inline-flex items-center gap-0.5"
+      style={{ color: "var(--text-4)" }}
+      title={higher ? "Higher is better" : "Lower is better"}
+    >
+      {higher ? "↑" : "↓"} better
+    </span>
+  );
+}
 
 export function Pill({
   children,

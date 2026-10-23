@@ -1,184 +1,111 @@
-/** Application shell and navigation.
+/** SDN Network Operations & RL Analytics Console.
  *
- * Connection state and data provenance live in the header, permanently
- * visible. A dashboard that keeps rendering the last frame after its stream
- * dies is worse than one that shows nothing, because stale numbers look
- * exactly like current ones.
+ * The shell owns navigation and the always-visible connection/provenance
+ * state; each page owns its own data. Pages are kept as separate modules and
+ * reused rather than duplicated — the Overview links into them instead of
+ * reimplementing their content.
  */
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { api } from "./api/client";
 import { useAsync, useLive } from "./hooks/useLive";
 import type { Capabilities, LiveSnapshot } from "./api/types";
+import { Shell, type PageId } from "./components/Shell";
 import {
   Card, Empty, MetricCard, Pill, SourceBadge, StatusDot, VARIANT_COLOR,
-  VARIANT_LABEL, cx, fmtAge, fmtNumber, fmtPercent, fmtTime,
+  VARIANT_LABEL, fmtNumber, fmtPercent, fmtTime,
 } from "./components/ui";
 import { TopologyView } from "./views/TopologyView";
 import { FlowTablesView } from "./views/FlowTablesView";
-import { RLDecisionsView } from "./views/RLDecisionsView";
 import { MetricsView } from "./views/MetricsView";
+import { RewardExplorerView } from "./views/RewardExplorerView";
+import { DecisionInspectorView } from "./views/DecisionInspectorView";
 import { ExperimentsView } from "./views/ExperimentsView";
 import { ComparisonView } from "./views/ComparisonView";
 import { HistoryView } from "./views/HistoryView";
 
-type Tab =
-  | "overview" | "topology" | "flows" | "decisions"
-  | "metrics" | "experiments" | "comparison" | "history";
-
-const TABS: { id: Tab; label: string }[] = [
-  { id: "overview", label: "Overview" },
-  { id: "topology", label: "Live Topology" },
-  { id: "flows", label: "Flow Tables" },
-  { id: "decisions", label: "RL Decisions" },
-  { id: "metrics", label: "Live Metrics" },
-  { id: "experiments", label: "Experiments" },
-  { id: "comparison", label: "A/B/C Comparison" },
-  { id: "history", label: "History" },
-];
-
 export default function App() {
-  const [tab, setTab] = useState<Tab>("overview");
+  const [page, setPage] = useState<PageId>("overview");
   const [runId, setRunId] = useState<string | undefined>(undefined);
   const feed = useLive(true);
   const caps = useAsync<Capabilities>(() => api.capabilities(), [], 30000);
 
   const snapshot = feed.snapshot;
   const mock = Boolean(caps.data?.mock_mode || snapshot?.mock_mode);
+  // When a recorded run is open, live-only pages read that run instead.
+  const liveSnapshot = runId ? null : snapshot;
+
+  const openRun = useCallback((id: string | undefined) => {
+    setRunId(id);
+    if (id) setPage("metrics");
+  }, []);
 
   return (
-    <div className="h-full flex flex-col" style={{ background: "var(--surface-0)" }}>
-      {mock && (
-        <div
-          className="px-4 py-1.5 text-[11px] font-medium text-center"
-          style={{ background: "rgba(201,133,0,0.2)", color: "#e0b45a" }}
-        >
-          MOCK MODE — every value shown is synthetic demo data, not a
-          measurement of any network.
-        </div>
-      )}
-
-      <header
-        className="border-b px-4 py-2.5 flex items-center gap-4 flex-wrap"
-        style={{ background: "var(--surface-1)", borderColor: "var(--border-1)" }}
-      >
-        <div className="flex items-center gap-2.5">
-          <div
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-[13px] font-bold"
-            style={{ background: "#1f5fae", color: "#fff" }}
-          >
-            ⬡
-          </div>
-          <div>
-            <h1 className="text-[13px] font-semibold leading-tight">
-              SDN + RL Research Dashboard
-            </h1>
-            <p className="text-[10px]" style={{ color: "var(--text-3)" }}>
-              RL-based traffic routing &amp; flow-table optimisation
-            </p>
-          </div>
-        </div>
-
-        <div className="flex-1" />
-        <ConnectionPill feed={feed} />
-        <RunPill snapshot={snapshot} runId={runId} />
-      </header>
-
-      <nav
-        className="border-b px-2 flex gap-0.5 overflow-x-auto"
-        style={{ background: "var(--surface-1)", borderColor: "var(--border-1)" }}
-      >
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={cx(
-              "px-3 py-2 text-[12px] font-medium whitespace-nowrap border-b-2 transition-colors",
-            )}
-            style={{
-              borderColor: tab === t.id ? "#4e9bff" : "transparent",
-              color: tab === t.id ? "var(--text-1)" : "var(--text-3)",
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
-      </nav>
-
-      <main className="flex-1 overflow-auto p-4 min-h-0">
-        {tab === "overview" && (
-          <Overview snapshot={snapshot} caps={caps.data} runId={runId} onTab={setTab} />
-        )}
-        {tab === "topology" && <TopologyView snapshot={runId ? null : snapshot} />}
-        {tab === "flows" && <FlowTablesView runId={runId} />}
-        {tab === "decisions" && (
-          <RLDecisionsView runId={runId} snapshot={runId ? null : snapshot} />
-        )}
-        {tab === "metrics" && (
-          <MetricsView runId={runId} snapshot={runId ? null : snapshot} />
-        )}
-        {tab === "experiments" && <ExperimentsView />}
-        {tab === "comparison" && <ComparisonView />}
-        {tab === "history" && (
-          <HistoryView onOpenRun={setRunId} selectedRunId={runId} />
-        )}
-      </main>
-    </div>
-  );
-}
-
-function ConnectionPill({ feed }: { feed: ReturnType<typeof useLive> }) {
-  const map = {
-    open: { tone: "ok" as const, label: "Live stream" },
-    polling: { tone: "warn" as const, label: "Polling (websocket unavailable)" },
-    connecting: { tone: "idle" as const, label: "Connecting…" },
-    reconnecting: { tone: "warn" as const, label: `Reconnecting (attempt ${feed.attempts})` },
-    closed: { tone: "idle" as const, label: "Disconnected" },
-  };
-  const s = map[feed.state];
-  return (
-    <div
-      className="flex items-center gap-2 px-2.5 py-1 rounded-lg border text-[11px]"
-      style={{ background: "var(--surface-2)", borderColor: "var(--border-1)" }}
-      title={feed.error ?? undefined}
+    <Shell
+      page={page}
+      onNavigate={setPage}
+      connection={feed.state}
+      lastUpdate={feed.lastUpdate}
+      connectionError={feed.error}
+      onReconnect={feed.reconnectNow}
+      mock={mock}
+      runBadge={<RunBadge snapshot={snapshot} runId={runId} onClear={() => setRunId(undefined)} />}
     >
-      <StatusDot tone={s.tone} pulse={feed.state === "open"} />
-      <span style={{ color: "var(--text-2)" }}>{s.label}</span>
-      {feed.lastUpdate && (
-        <span className="num" style={{ color: "var(--text-3)" }}>
-          {fmtAge((Date.now() - feed.lastUpdate) / 1000)}
-        </span>
+      {page === "overview" && (
+        <Overview
+          snapshot={liveSnapshot} caps={caps.data} runId={runId} onNavigate={setPage}
+        />
       )}
-      {(feed.state === "reconnecting" || feed.state === "closed") && (
-        <button onClick={feed.reconnectNow} className="underline" style={{ color: "#5f9fe8" }}>
-          retry
-        </button>
+      {page === "topology" && <TopologyView snapshot={liveSnapshot} />}
+      {page === "metrics" && (
+        <div className="space-y-4">
+          <MetricsView runId={runId} snapshot={liveSnapshot} />
+          <FlowTablesView runId={runId} />
+        </div>
       )}
-    </div>
+      {page === "reward" && <RewardExplorerView runId={runId} />}
+      {page === "decisions" && (
+        <DecisionInspectorView runId={runId} snapshot={liveSnapshot} />
+      )}
+      {page === "experiments" && <ExperimentsView />}
+      {page === "comparison" && <ComparisonView />}
+      {page === "history" && (
+        <HistoryView onOpenRun={openRun} selectedRunId={runId} />
+      )}
+    </Shell>
   );
 }
 
-function RunPill({
-  snapshot, runId,
+function RunBadge({
+  snapshot, runId, onClear,
 }: {
   snapshot: LiveSnapshot | null;
   runId?: string;
+  onClear: () => void;
 }) {
   if (runId) {
     return (
       <div
-        className="flex items-center gap-2 px-2.5 py-1 rounded-lg border text-[11px]"
-        style={{ background: "rgba(57,135,229,0.1)", borderColor: "rgba(57,135,229,0.35)" }}
+        className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-[11px]"
+        style={{ background: "var(--surface-2)", borderColor: "var(--border-2)" }}
       >
         <SourceBadge source="historical" />
-        <span className="mono truncate max-w-[200px]" title={runId}>{runId}</span>
+        <span className="mono truncate max-w-[180px]" title={runId}>{runId}</span>
+        <button
+          onClick={onClear}
+          className="underline shrink-0"
+          style={{ color: "var(--accent)" }}
+        >
+          back to live
+        </button>
       </div>
     );
   }
+
   const live = snapshot?.live;
   if (!live?.active) {
     return (
       <div
-        className="flex items-center gap-2 px-2.5 py-1 rounded-lg border text-[11px]"
+        className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-[11px]"
         style={{ background: "var(--surface-2)", borderColor: "var(--border-1)" }}
       >
         <StatusDot tone="idle" />
@@ -186,92 +113,114 @@ function RunPill({
       </div>
     );
   }
+
   return (
     <div
-      className="flex items-center gap-2 px-2.5 py-1 rounded-lg border text-[11px]"
-      style={{ background: "rgba(46,163,107,0.1)", borderColor: "rgba(46,163,107,0.35)" }}
+      className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-[11px]"
+      style={{ background: "var(--ok-dim)", borderColor: "rgba(52,211,153,0.3)" }}
     >
       <StatusDot tone="ok" pulse />
-      <span style={{ color: VARIANT_COLOR[live.variant ?? "A"] }} className="font-semibold">
+      <span className="font-semibold" style={{ color: VARIANT_COLOR[live.variant ?? "A"] }}>
         {live.variant}
       </span>
-      <span style={{ color: "var(--text-2)" }}>
+      <span style={{ color: "var(--text-2)" }} className="truncate">
         {live.workload} · seed {live.seed}
       </span>
+      {live.elapsed_s !== null && live.duration_s && (
+        <span className="num" style={{ color: "var(--text-3)" }}>
+          {Math.round(live.elapsed_s)}/{Math.round(live.duration_s)}s
+        </span>
+      )}
       {live.matrix_running && <Pill color="var(--warn)">matrix</Pill>}
     </div>
   );
 }
 
 function Overview({
-  snapshot, caps, runId, onTab,
+  snapshot, caps, runId, onNavigate,
 }: {
   snapshot: LiveSnapshot | null;
   caps?: Capabilities | null;
   runId?: string;
-  onTab: (t: Tab) => void;
+  onNavigate: (p: PageId) => void;
 }) {
   const live = snapshot?.live;
   const metrics = snapshot?.metrics;
   const latency = snapshot?.latency;
   const verification = snapshot?.verification;
   const values = metrics?.values ?? {};
-  const active = live?.active && !runId;
+  const active = Boolean(live?.active) && !runId;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="space-y-4">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card title="System status" className="lg:col-span-2">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[12px]">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Stat
-              label="Experiment"
-              value={active ? "running" : "idle"}
+              label="Experiment" value={active ? "Running" : "Idle"}
               tone={active ? "ok" : "idle"}
-              detail={active ? `${live?.variant} / ${live?.workload} / seed ${live?.seed}` : "—"}
+              detail={active ? `${live?.variant} · ${live?.workload} · seed ${live?.seed}` : "nothing in flight"}
             />
             <Stat
-              label="Controller"
-              value={active ? "connected" : "not running"}
-              tone={active ? "ok" : "idle"}
-              detail="OpenFlow 1.3 on 127.0.0.1:6653"
+              label="Controller" value={active ? "Connected" : "Not running"}
+              tone={active ? "ok" : "idle"} detail="OpenFlow 1.3 · 127.0.0.1:6653"
             />
             <Stat
-              label="API privileges"
-              value={caps?.is_root ? "root" : "unprivileged"}
-              tone={caps?.is_root ? "warn" : "ok"}
-              detail={caps?.can_start_experiments ? "can start runs" : "read-only"}
+              label="Experiment launching"
+              value={
+                caps?.start_mechanism === "launcher" ? "Enabled"
+                  : caps?.start_mechanism === "root_api" ? "Root API"
+                    : "Unavailable"
+              }
+              tone={caps?.start_mechanism === "launcher" ? "ok"
+                : caps?.start_mechanism === "root_api" ? "warn" : "idle"}
+              detail={
+                caps?.start_mechanism === "launcher"
+                  ? "privileged launcher connected"
+                  : caps?.start_mechanism === "root_api"
+                    ? "API running as root"
+                    : "launcher not running"
+              }
             />
             <Stat
               label="Data source"
-              value={runId ? "recorded run" : active ? "live" : "none"}
+              value={runId ? "Recorded" : active ? "Live" : "None"}
               tone={runId ? "idle" : active ? "ok" : "idle"}
               detail={runId ?? (active ? live?.run_id ?? "" : "no telemetry")}
             />
           </div>
           {live?.detail && (
-            <p className="text-[11px] mt-3" style={{ color: "var(--text-3)" }}>
+            <p className="text-[11.5px] mt-3" style={{ color: "var(--text-3)" }}>
               {live.detail}
             </p>
           )}
         </Card>
 
         <Card title="Variants under test">
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {(["A", "B", "C"] as const).map((v) => (
-              <div key={v} className="flex items-start gap-2">
+              <div key={v} className="flex items-start gap-2.5">
                 <span
                   className="w-2.5 h-2.5 rounded-sm mt-1 shrink-0"
                   style={{ background: VARIANT_COLOR[v] }}
+                  aria-hidden="true"
                 />
-                <div>
+                <div className="min-w-0">
                   <p className="text-[12px] font-semibold">Variant {v}</p>
-                  <p className="text-[10px]" style={{ color: "var(--text-3)" }}>
+                  <p className="text-[10.5px] leading-snug" style={{ color: "var(--text-3)" }}>
                     {VARIANT_LABEL[v]}
                   </p>
                 </div>
               </div>
             ))}
           </div>
+          <button
+            onClick={() => onNavigate("comparison")}
+            className="text-[11px] underline underline-offset-2 mt-3"
+            style={{ color: "var(--accent)" }}
+          >
+            Compare measured results →
+          </button>
         </Card>
       </div>
 
@@ -279,26 +228,28 @@ function Overview({
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <MetricCard
-              label="Throughput" unit="Mbit/s" source="live"
+              label="Throughput" unit="Mbit/s" source="live" kind="interval_rate"
               value={fmtNumber(((values.delivered_bps as number) ?? 0) / 1e6, 2)}
-              sub="delivered to hosts" kind="interval_rate"
+              sub="delivered to hosts" direction="higher_is_better"
             />
             <MetricCard
-              label="Median RTT" unit="ms"
+              label="Latency (median)" unit="ms"
               source={latency?.available ? "live" : "unavailable"}
-              value={latency?.available ? fmtNumber(latency.median_ms, 1) : "—"}
-              sub={latency?.available ? `p95 ${fmtNumber(latency.p95_ms, 1)} ms` : "not measured"}
+              value={latency?.available ? fmtNumber(latency.median_ms, 1) : "N/A"}
+              sub={latency?.available ? `p95 ${fmtNumber(latency.p95_ms, 1)} ms` : "no probe data"}
+              direction="lower_is_better"
             />
             <MetricCard
-              label="Max link utilisation" unit="%" source="live"
+              label="Max link utilisation" unit="%" source="live" kind="interval_rate"
               value={fmtNumber(((values.max_link_util as number) ?? 0) * 100, 1)}
               sub={`A ${fmtPercent(values.util_A as number, 0)} · B ${fmtPercent(values.util_B as number, 0)}`}
               tone={((values.max_link_util as number) ?? 0) > 0.9 ? "warn" : undefined}
+              direction="context"
             />
             <MetricCard
-              label="Flow-table occupancy" unit="rules" source="live"
+              label="Flow-table occupancy" unit="rules" source="live" kind="instantaneous"
               value={fmtNumber(values.total_rules as number, 0)}
-              sub="routed rules, all switches" kind="instantaneous"
+              sub="installed across all switches" direction="lower_is_better"
             />
           </div>
 
@@ -310,26 +261,36 @@ function Overview({
               {snapshot?.decisions?.length ? (
                 <LatestDecision snapshot={snapshot} />
               ) : (
-                <Empty title="No decisions yet" detail="The first policy step occurs after the first telemetry interval." />
+                <Empty
+                  title="No decisions yet"
+                  detail="The first policy step happens after the first telemetry interval."
+                />
               )}
               {verification?.detail && (
                 <p className="text-[11px] mt-3 leading-relaxed" style={{ color: "var(--text-3)" }}>
                   {verification.detail}
                 </p>
               )}
-              <button onClick={() => onTab("decisions")}
-                      className="text-[11px] underline underline-offset-2 mt-2"
-                      style={{ color: "#5f9fe8" }}>
-                Open RL decision monitor →
-              </button>
+              <div className="flex gap-3 mt-2">
+                <button onClick={() => onNavigate("decisions")}
+                        className="text-[11px] underline underline-offset-2"
+                        style={{ color: "var(--accent)" }}>
+                  Decision Inspector →
+                </button>
+                <button onClick={() => onNavigate("reward")}
+                        className="text-[11px] underline underline-offset-2"
+                        style={{ color: "var(--rl)" }}>
+                  Reward Explorer →
+                </button>
+              </div>
             </Card>
 
             <Card title="Recent events" right={<SourceBadge source="live" />}>
               {snapshot?.events?.length ? (
-                <div className="space-y-1 max-h-[200px] overflow-auto">
+                <div className="space-y-1 max-h-[210px] overflow-auto">
                   {[...snapshot.events].reverse().map((e, i) => (
                     <div key={i} className="flex gap-2 text-[11px]">
-                      <span className="num shrink-0" style={{ color: "var(--text-3)" }}>
+                      <span className="num shrink-0" style={{ color: "var(--text-4)" }}>
                         {fmtTime(e.t)}
                       </span>
                       <span className="font-medium shrink-0">{e.kind}</span>
@@ -346,21 +307,36 @@ function Overview({
           </div>
         </>
       ) : (
-        <Card title="No live telemetry">
+        <Card title={runId ? "Viewing a recorded run" : "No live telemetry"}>
           <Empty
-            title={runId ? "Viewing a recorded run" : "No experiment is running"}
+            title={runId ? "Live cards are hidden" : "No experiment is running"}
             detail={
               runId
-                ? "Live cards are hidden while a recorded run is selected. Use the Flow Tables, RL Decisions and Metrics pages to inspect it."
-                : "Start a run from the Experiments page, or browse completed runs in History. Live metrics, flow tables and agent decisions appear here while an experiment runs."
+                ? "A recorded run is open. Use Metrics, Reward Explorer and Decision Inspector to inspect it, or return to live from the header."
+                : "Start a run from Experiments, or open a completed one from History. Live metrics, decisions and topology appear here while an experiment runs."
+            }
+            action={
+              <div className="flex gap-2 mt-1">
+                <button onClick={() => onNavigate("experiments")}
+                        className="px-3 py-1.5 rounded-lg border text-[12px] font-medium"
+                        style={{ background: "var(--accent-dim)", borderColor: "var(--accent-ring)",
+                                 color: "var(--accent)" }}>
+                  Go to Experiments
+                </button>
+                <button onClick={() => onNavigate("history")}
+                        className="px-3 py-1.5 rounded-lg border text-[12px]"
+                        style={{ borderColor: "var(--border-2)", color: "var(--text-2)" }}>
+                  Browse History
+                </button>
+              </div>
             }
           />
         </Card>
       )}
 
       {caps?.notes?.length ? (
-        <Card title="How this dashboard reads the system">
-          <ul className="space-y-1.5 text-[11px] leading-relaxed" style={{ color: "var(--text-3)" }}>
+        <Card title="How this console reads the system">
+          <ul className="space-y-1.5 text-[11.5px] leading-relaxed" style={{ color: "var(--text-3)" }}>
             {caps.notes.map((n, i) => <li key={i}>• {n}</li>)}
           </ul>
         </Card>
@@ -374,33 +350,29 @@ function LatestDecision({ snapshot }: { snapshot: LiveSnapshot }) {
   const latest = decisions[decisions.length - 1];
   const previous = decisions.length > 1 ? decisions[decisions.length - 2] : null;
   const status = snapshot.verification?.status;
-  const tone =
-    status === "confirmed" ? "ok" : status === "not_observed" ? "bad" : "warn";
+  const tone = status === "confirmed" ? "ok" : status === "not_observed" ? "bad" : "warn";
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-3 text-[13px]">
         <span style={{ color: "var(--text-3)" }}>
           {previous ? `Path ${previous.path}` : "—"}
         </span>
-        <span style={{ color: "var(--text-3)" }}>→</span>
+        <span style={{ color: "var(--text-4)" }}>→</span>
         <span className="font-semibold">Path {latest.path}</span>
         {latest.idle_timeout !== null && (
-          <Pill color="var(--variant-c)">{latest.idle_timeout}s idle</Pill>
+          <Pill color="var(--rl)">{latest.idle_timeout}s idle</Pill>
         )}
       </div>
-      <div className="flex items-center gap-2 text-[11px]">
+      <div className="flex items-center gap-2 text-[11.5px]">
         <StatusDot tone={tone} pulse={status === "awaiting_confirmation"} />
         <span style={{ color: "var(--text-2)" }}>
-          {status === "confirmed"
-            ? "Confirmed on switches"
-            : status === "awaiting_confirmation"
-              ? "Awaiting switch confirmation"
-              : status === "not_observed"
-                ? "Not observed on switches"
+          {status === "confirmed" ? "Confirmed on switches"
+            : status === "awaiting_confirmation" ? "Awaiting switch confirmation"
+              : status === "not_observed" ? "Not observed on switches"
                 : "Unverified"}
         </span>
       </div>
-      <div className="flex gap-4 text-[11px]" style={{ color: "var(--text-3)" }}>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]" style={{ color: "var(--text-3)" }}>
         <span>step {latest.step}</span>
         <span className="num">reward {fmtNumber(latest.reward, 3)}</span>
         {latest.epsilon !== null && <span className="num">ε {fmtNumber(latest.epsilon, 3)}</span>}
@@ -420,13 +392,14 @@ function Stat({
 }) {
   return (
     <div>
-      <p className="text-[10px]" style={{ color: "var(--text-3)" }}>{label}</p>
-      <p className="flex items-center gap-1.5 font-medium">
+      <p className="text-[10.5px]" style={{ color: "var(--text-4)" }}>{label}</p>
+      <p className="flex items-center gap-1.5 font-semibold text-[13px]">
         <StatusDot tone={tone} />
         {value}
       </p>
       {detail && (
-        <p className="text-[10px] truncate mt-0.5" style={{ color: "var(--text-3)" }} title={detail}>
+        <p className="text-[10px] truncate mt-0.5" style={{ color: "var(--text-4)" }}
+           title={detail}>
           {detail}
         </p>
       )}

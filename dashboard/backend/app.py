@@ -29,6 +29,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from . import mock, telemetry
+from . import reward as reward_module
 from .comparison import analysis_artifacts, collect_run_metrics, compare
 from .config import (
     ALLOWED_ORIGINS, ANALYSIS_OUT, LIVE_POLL_INTERVAL_S, PROJECT_ROOT, RUNS_DIR,
@@ -270,6 +271,38 @@ def metrics_latency(run_id: Optional[str] = Query(None),
     payload = telemetry.read_latency(raw_dir, window_s)
     payload["source"] = DataSource.LIVE.value if live else DataSource.HISTORICAL.value
     return payload
+
+
+@app.get("/api/reward/model")
+def reward_model_endpoint(run_id: Optional[str] = Query(None)) -> Dict[str, object]:
+    """The reward definition, with the weights the given run actually used."""
+    if run_id and find_run(run_id) is None:
+        raise HTTPException(status_code=404, detail=f"unknown run {run_id!r}")
+    return reward_module.reward_model(run_id)
+
+
+@app.get("/api/reward/explain")
+def reward_explain(run_id: Optional[str] = Query(None),
+                   limit: int = Query(120, ge=1, le=2000)) -> Dict[str, object]:
+    """Per-step reward breakdown, reconciled against the recorded total."""
+    if is_mock():
+        decisions = mock.mock_decisions(min(limit, 40))
+        model = reward_module.reward_model(None)
+        return {
+            "available": True, "source": DataSource.MOCK.value, "model": model,
+            "steps": [], "reconciliation": {"checked": 0, "ok": True,
+                                            "note": "MOCK DATA."},
+            "note": "MOCK DATA - no reward was computed from any network.",
+            "decisions_preview": len(decisions),
+        }
+    raw_dir, _ = _resolve_raw_dir(run_id)
+    return reward_module.explain_decisions(run_id, raw_dir, limit)
+
+
+@app.get("/api/metrics/catalog")
+def metrics_catalog() -> Dict[str, object]:
+    """Units, plain-English meaning and desirable direction for each metric."""
+    return reward_module.metric_catalog()
 
 
 @app.get("/api/events")

@@ -106,15 +106,31 @@ describe("App", () => {
     vi.restoreAllMocks();
   });
 
-  it("renders the shell and all navigation sections", async () => {
+  it("renders the shell and every navigation section", async () => {
     render(<App />);
-    expect(screen.getByText("SDN + RL Research Dashboard")).toBeInTheDocument();
+    expect(screen.getByText(/SDN.*RL Console/)).toBeInTheDocument();
     for (const label of [
-      "Overview", "Live Topology", "Flow Tables", "RL Decisions",
-      "Live Metrics", "Experiments", "A/B/C Comparison", "History",
+      "Overview", "Live Topology", "Metrics & Analytics", "Reward Explorer",
+      "Decision Inspector", "Experiments", "A/B/C Comparison", "History",
     ]) {
       expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
     }
+  });
+
+  it("groups navigation so RL pages are findable", () => {
+    render(<App />);
+    expect(screen.getByText("Operations")).toBeInTheDocument();
+    expect(screen.getByText("Reinforcement learning")).toBeInTheDocument();
+    expect(screen.getByText("Experiments", { selector: "p" })).toBeInTheDocument();
+  });
+
+  it("marks the current page for assistive technology", async () => {
+    render(<App />);
+    const overview = screen.getByRole("button", { name: "Overview" });
+    expect(overview).toHaveAttribute("aria-current", "page");
+
+    const reward = screen.getByRole("button", { name: "Reward Explorer" });
+    expect(reward).not.toHaveAttribute("aria-current");
   });
 
   it("states plainly when no experiment is running", async () => {

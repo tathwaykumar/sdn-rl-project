@@ -250,8 +250,13 @@ def verify_comparison(base: str) -> None:
     # Recompute one cell with the project's analysis code and compare.
     try:
         from analysis import stats
+        from analysis.aggregate import modal_duration, split_by_duration
         from dashboard.backend.comparison import collect_run_metrics
-        rows = collect_run_metrics(window="full")
+        rows = [r for r in collect_run_metrics(window="full") if r.get("complete")]
+        # Mirror the filter the API applies: only runs of the comparable
+        # duration. Recomputing without it would "disagree" with the API by
+        # reproducing a bug the API does not have.
+        rows, _ = split_by_duration(rows, modal_duration(rows))
     except Exception as exc:
         check("Comparison matches the project's analysis code", False, str(exc))
         return

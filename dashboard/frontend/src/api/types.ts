@@ -378,6 +378,103 @@ export interface ComparisonPayload {
   note: string;
 }
 
+/** One term of the reward, as implemented in agent/reward.py. */
+export interface RewardTerm {
+  key: string;
+  label: string;
+  weight: number;
+  sign: number;
+  signed_weight: number;
+  plain: string;
+  measured: string;
+  normalisation: string;
+  direction: string;
+}
+
+export interface RewardModel {
+  source: DataSource;
+  run_id: string | null;
+  note: string;
+  expression: string;
+  clip_range: [number, number];
+  terms: RewardTerm[];
+  weights: Record<string, number>;
+  normalisers: Record<string, number>;
+  plain_summary: string;
+  scale_guide: { band: string; meaning: string; range: string }[];
+  caveats: string[];
+}
+
+export interface RewardContribution {
+  key: string;
+  label: string;
+  term_value: number | null;
+  weight: number;
+  sign: number;
+  /** term_value × weight × sign. Null when the term was not recorded. */
+  contribution: number | null;
+}
+
+export interface RewardStep {
+  t: number | null;
+  step: number;
+  variant: string;
+  state: string;
+  action: string;
+  path: string;
+  idle_timeout: number | null;
+  reward: number | null;
+  band: "positive" | "near_zero" | "negative" | null;
+  contributions: RewardContribution[];
+  sum_of_contributions: number | null;
+  clipped: boolean;
+  residual: number | null;
+  reconciles: boolean;
+  epsilon: number | null;
+  exploratory: boolean | null;
+  greedy_action: string | null;
+  q_before: number | null;
+  q_after: number | null;
+  td_error: number | null;
+}
+
+export interface RewardExplain {
+  available: boolean;
+  source?: DataSource;
+  reason?: string;
+  run_id?: string | null;
+  model: RewardModel;
+  steps: RewardStep[];
+  reconciliation?: {
+    checked: number;
+    reconciled: number;
+    unreconciled: number;
+    clipped_rows: number;
+    worst_residual: number;
+    tolerance: number;
+    ok: boolean;
+    note: string;
+  };
+}
+
+export interface MetricDefinition {
+  key: string;
+  label: string;
+  unit: string;
+  direction: "higher_is_better" | "lower_is_better" | "context";
+  kind: "instantaneous" | "interval_rate" | "interval_count" | "event";
+  plain: string;
+  measured: string;
+  caveat?: string;
+}
+
+export interface MetricCatalog {
+  source: DataSource;
+  metrics: MetricDefinition[];
+  kinds: Record<string, string>;
+  note: string;
+}
+
 export interface LiveSnapshot {
   type: "snapshot" | "error";
   t: number;
