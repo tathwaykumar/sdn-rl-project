@@ -1,0 +1,2060 @@
+{
+  "by_variant": {
+    "A": {
+      "distinct_paths": 2,
+      "distinct_timeouts": 1,
+      "path_agreement": 0.9735,
+      "path_counts": {
+        "A": 4231,
+        "B": 893
+      },
+      "path_share": {
+        "A": 0.8257,
+        "B": 0.1743
+      },
+      "rules_checked_against_decisions": 5124,
+      "runs": 20,
+      "timeout_agreement": 1.0,
+      "timeout_counts": {
+        "15": 16270
+      }
+    },
+    "B": {
+      "distinct_paths": 2,
+      "distinct_timeouts": 1,
+      "path_agreement": 0.9915,
+      "path_counts": {
+        "A": 1906,
+        "B": 3147
+      },
+      "path_share": {
+        "A": 0.3772,
+        "B": 0.6228
+      },
+      "rules_checked_against_decisions": 5053,
+      "runs": 20,
+      "timeout_agreement": 1.0,
+      "timeout_counts": {
+        "15": 18311
+      }
+    },
+    "C": {
+      "distinct_paths": 2,
+      "distinct_timeouts": 3,
+      "path_agreement": 0.9768,
+      "path_counts": {
+        "A": 1842,
+        "B": 3451
+      },
+      "path_share": {
+        "A": 0.348,
+        "B": 0.652
+      },
+      "rules_checked_against_decisions": 5293,
+      "runs": 20,
+      "timeout_agreement": 1.0,
+      "timeout_counts": {
+        "15": 6942,
+        "5": 5364,
+        "60": 7030
+      }
+    }
+  },
+  "claims": [
+    {
+      "claim": "C varies flow-rule idle timeouts",
+      "detail": "distinct idle_timeout values installed: {'5': 5364, '15': 6942, '60': 7030}",
+      "result": "PASS"
+    },
+    {
+      "claim": "A keeps flow-rule timeouts fixed",
+      "detail": "distinct idle_timeout values installed: {'15': 16270}",
+      "result": "PASS"
+    },
+    {
+      "claim": "B keeps flow-rule timeouts fixed",
+      "detail": "distinct idle_timeout values installed: {'15': 18311}",
+      "result": "PASS"
+    },
+    {
+      "claim": "B uses both routing paths",
+      "detail": "path usage in installed rules: {'B': 3147, 'A': 1906}",
+      "result": "PASS"
+    },
+    {
+      "claim": "C uses both routing paths",
+      "detail": "path usage in installed rules: {'B': 3451, 'A': 1842}",
+      "result": "PASS"
+    },
+    {
+      "claim": "A: installed rules match the decision in force",
+      "detail": "97.4% of 5124 rules agree",
+      "result": "PASS"
+    },
+    {
+      "claim": "B: installed rules match the decision in force",
+      "detail": "99.2% of 5053 rules agree",
+      "result": "PASS"
+    },
+    {
+      "claim": "C: installed rules match the decision in force",
+      "detail": "97.7% of 5293 rules agree",
+      "result": "PASS"
+    },
+    {
+      "claim": "B's path distribution differs from A's",
+      "detail": "A={'A': 0.8257, 'B': 0.1743} vs B={'B': 0.6228, 'A': 0.3772}",
+      "result": "PASS"
+    },
+    {
+      "claim": "C differs from B in installed timeouts",
+      "detail": "B={'15': 18311} vs C={'5': 5364, '15': 6942, '60': 7030}",
+      "result": "PASS"
+    }
+  ],
+  "per_run": [
+    {
+      "agreement_agree": 78,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 78,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 78,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 78,
+      "complete": true,
+      "decision_paths": {
+        "A": 98
+      },
+      "decision_timeouts": {
+        "15": 98
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 78
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 234,
+      "run": "20261023-080215-A-light-seed1",
+      "seed": 1,
+      "timeout_counts": {
+        "15": 234
+      },
+      "variant": "A",
+      "workload": "light"
+    },
+    {
+      "agreement_agree": 78,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 78,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 78,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 78,
+      "complete": true,
+      "decision_paths": {
+        "A": 91,
+        "B": 7
+      },
+      "decision_timeouts": {
+        "15": 98
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "B": 78
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 312,
+      "run": "20261023-080358-B-light-seed1",
+      "seed": 1,
+      "timeout_counts": {
+        "15": 312
+      },
+      "variant": "B",
+      "workload": "light"
+    },
+    {
+      "agreement_agree": 74,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 74,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 74,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 74,
+      "complete": true,
+      "decision_paths": {
+        "A": 88,
+        "B": 10
+      },
+      "decision_timeouts": {
+        "15": 9,
+        "5": 83,
+        "60": 6
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "B": 74
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 296,
+      "run": "20261023-080540-C-light-seed1",
+      "seed": 1,
+      "timeout_counts": {
+        "5": 296
+      },
+      "variant": "C",
+      "workload": "light"
+    },
+    {
+      "agreement_agree": 122,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 122,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 122,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 122,
+      "complete": true,
+      "decision_paths": {
+        "A": 98
+      },
+      "decision_timeouts": {
+        "15": 98
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 122
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 366,
+      "run": "20261023-080723-A-heavy-seed1",
+      "seed": 1,
+      "timeout_counts": {
+        "15": 366
+      },
+      "variant": "A",
+      "workload": "heavy"
+    },
+    {
+      "agreement_agree": 122,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 122,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 122,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 122,
+      "complete": true,
+      "decision_paths": {
+        "A": 91,
+        "B": 7
+      },
+      "decision_timeouts": {
+        "15": 98
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 2,
+        "B": 120
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 486,
+      "run": "20261023-080906-B-heavy-seed1",
+      "seed": 1,
+      "timeout_counts": {
+        "15": 486
+      },
+      "variant": "B",
+      "workload": "heavy"
+    },
+    {
+      "agreement_agree": 114,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 114,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 114,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 114,
+      "complete": true,
+      "decision_paths": {
+        "A": 88,
+        "B": 10
+      },
+      "decision_timeouts": {
+        "15": 12,
+        "5": 80,
+        "60": 6
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 2,
+      "path_counts": {
+        "B": 114
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 456,
+      "run": "20261023-081048-C-heavy-seed1",
+      "seed": 1,
+      "timeout_counts": {
+        "15": 8,
+        "5": 448
+      },
+      "variant": "C",
+      "workload": "heavy"
+    },
+    {
+      "agreement_agree": 378,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 378,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 378,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 378,
+      "complete": true,
+      "decision_paths": {
+        "A": 98
+      },
+      "decision_timeouts": {
+        "15": 98
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 378
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 1134,
+      "run": "20261023-081231-A-churn-seed1",
+      "seed": 1,
+      "timeout_counts": {
+        "15": 1134
+      },
+      "variant": "A",
+      "workload": "churn"
+    },
+    {
+      "agreement_agree": 370,
+      "agreement_agreement": 0.9973045822102425,
+      "agreement_checked": 371,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 371,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 371,
+      "complete": true,
+      "decision_paths": {
+        "A": 49,
+        "B": 49
+      },
+      "decision_timeouts": {
+        "15": 98
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 171,
+        "B": 200
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 1314,
+      "run": "20261023-081414-B-churn-seed1",
+      "seed": 1,
+      "timeout_counts": {
+        "15": 1314
+      },
+      "variant": "B",
+      "workload": "churn"
+    },
+    {
+      "agreement_agree": 542,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 542,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 542,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 542,
+      "complete": true,
+      "decision_paths": {
+        "A": 46,
+        "B": 52
+      },
+      "decision_timeouts": {
+        "15": 41,
+        "5": 31,
+        "60": 26
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 3,
+      "path_counts": {
+        "A": 326,
+        "B": 216
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 1842,
+      "run": "20261023-081557-C-churn-seed1",
+      "seed": 1,
+      "timeout_counts": {
+        "15": 320,
+        "5": 322,
+        "60": 1200
+      },
+      "variant": "C",
+      "workload": "churn"
+    },
+    {
+      "agreement_agree": 408,
+      "agreement_agreement": 0.8717948717948718,
+      "agreement_checked": 468,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 468,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 468,
+      "complete": true,
+      "decision_paths": {
+        "A": 74,
+        "B": 24
+      },
+      "decision_timeouts": {
+        "15": 98
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 288,
+        "B": 180
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 1584,
+      "run": "20261023-081739-A-failure-seed1",
+      "seed": 1,
+      "timeout_counts": {
+        "15": 1584
+      },
+      "variant": "A",
+      "workload": "failure"
+    },
+    {
+      "agreement_agree": 456,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 456,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 456,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 456,
+      "complete": true,
+      "decision_paths": {
+        "A": 31,
+        "B": 67
+      },
+      "decision_timeouts": {
+        "15": 98
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 96,
+        "B": 360
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 1728,
+      "run": "20261023-081922-B-failure-seed1",
+      "seed": 1,
+      "timeout_counts": {
+        "15": 1728
+      },
+      "variant": "B",
+      "workload": "failure"
+    },
+    {
+      "agreement_agree": 404,
+      "agreement_agreement": 0.9181818181818182,
+      "agreement_checked": 440,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 440,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 440,
+      "complete": true,
+      "decision_paths": {
+        "A": 30,
+        "B": 68
+      },
+      "decision_timeouts": {
+        "15": 58,
+        "5": 29,
+        "60": 11
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 3,
+      "path_counts": {
+        "A": 98,
+        "B": 342
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 1662,
+      "run": "20261023-082105-C-failure-seed1",
+      "seed": 1,
+      "timeout_counts": {
+        "15": 1086,
+        "5": 208,
+        "60": 368
+      },
+      "variant": "C",
+      "workload": "failure"
+    },
+    {
+      "agreement_agree": 78,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 78,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 78,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 78,
+      "complete": true,
+      "decision_paths": {
+        "A": 97
+      },
+      "decision_timeouts": {
+        "15": 97
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 78
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 234,
+      "run": "20261023-082247-A-light-seed2",
+      "seed": 2,
+      "timeout_counts": {
+        "15": 234
+      },
+      "variant": "A",
+      "workload": "light"
+    },
+    {
+      "agreement_agree": 78,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 78,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 78,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 78,
+      "complete": true,
+      "decision_paths": {
+        "A": 52,
+        "B": 46
+      },
+      "decision_timeouts": {
+        "15": 98
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 78
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 234,
+      "run": "20261023-082429-B-light-seed2",
+      "seed": 2,
+      "timeout_counts": {
+        "15": 234
+      },
+      "variant": "B",
+      "workload": "light"
+    },
+    {
+      "agreement_agree": 74,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 74,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 74,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 74,
+      "complete": true,
+      "decision_paths": {
+        "A": 48,
+        "B": 49
+      },
+      "decision_timeouts": {
+        "15": 32,
+        "5": 30,
+        "60": 35
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 74
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 222,
+      "run": "20261023-082611-C-light-seed2",
+      "seed": 2,
+      "timeout_counts": {
+        "5": 222
+      },
+      "variant": "C",
+      "workload": "light"
+    },
+    {
+      "agreement_agree": 120,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 120,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 120,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 120,
+      "complete": true,
+      "decision_paths": {
+        "A": 98
+      },
+      "decision_timeouts": {
+        "15": 98
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 120
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 360,
+      "run": "20261023-082753-A-heavy-seed2",
+      "seed": 2,
+      "timeout_counts": {
+        "15": 360
+      },
+      "variant": "A",
+      "workload": "heavy"
+    },
+    {
+      "agreement_agree": 120,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 120,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 120,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 120,
+      "complete": true,
+      "decision_paths": {
+        "A": 87,
+        "B": 11
+      },
+      "decision_timeouts": {
+        "15": 98
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 84,
+        "B": 36
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 396,
+      "run": "20261023-082936-B-heavy-seed2",
+      "seed": 2,
+      "timeout_counts": {
+        "15": 396
+      },
+      "variant": "B",
+      "workload": "heavy"
+    },
+    {
+      "agreement_agree": 116,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 116,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 116,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 116,
+      "complete": true,
+      "decision_paths": {
+        "A": 17,
+        "B": 81
+      },
+      "decision_timeouts": {
+        "15": 74,
+        "5": 16,
+        "60": 8
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 3,
+      "path_counts": {
+        "A": 80,
+        "B": 36
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 384,
+      "run": "20261023-083118-C-heavy-seed2",
+      "seed": 2,
+      "timeout_counts": {
+        "15": 18,
+        "5": 222,
+        "60": 144
+      },
+      "variant": "C",
+      "workload": "heavy"
+    },
+    {
+      "agreement_agree": 351,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 351,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 351,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 351,
+      "complete": true,
+      "decision_paths": {
+        "A": 98
+      },
+      "decision_timeouts": {
+        "15": 98
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 351
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 1055,
+      "run": "20261023-083301-A-churn-seed2",
+      "seed": 2,
+      "timeout_counts": {
+        "15": 1055
+      },
+      "variant": "A",
+      "workload": "churn"
+    },
+    {
+      "agreement_agree": 353,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 353,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 353,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 353,
+      "complete": true,
+      "decision_paths": {
+        "A": 55,
+        "B": 43
+      },
+      "decision_timeouts": {
+        "15": 98
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 165,
+        "B": 188
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 1251,
+      "run": "20261023-083444-B-churn-seed2",
+      "seed": 2,
+      "timeout_counts": {
+        "15": 1251
+      },
+      "variant": "B",
+      "workload": "churn"
+    },
+    {
+      "agreement_agree": 468,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 468,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 468,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 468,
+      "complete": true,
+      "decision_paths": {
+        "A": 55,
+        "B": 43
+      },
+      "decision_timeouts": {
+        "15": 16,
+        "5": 50,
+        "60": 32
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 3,
+      "path_counts": {
+        "A": 180,
+        "B": 288
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 1692,
+      "run": "20261023-083626-C-churn-seed2",
+      "seed": 2,
+      "timeout_counts": {
+        "15": 356,
+        "5": 290,
+        "60": 1046
+      },
+      "variant": "C",
+      "workload": "churn"
+    },
+    {
+      "agreement_agree": 384,
+      "agreement_agreement": 0.8347826086956521,
+      "agreement_checked": 460,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 460,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 460,
+      "complete": true,
+      "decision_paths": {
+        "A": 74,
+        "B": 24
+      },
+      "decision_timeouts": {
+        "15": 98
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 280,
+        "B": 180
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 1560,
+      "run": "20261023-083809-A-failure-seed2",
+      "seed": 2,
+      "timeout_counts": {
+        "15": 1560
+      },
+      "variant": "A",
+      "workload": "failure"
+    },
+    {
+      "agreement_agree": 458,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 458,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 458,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 458,
+      "complete": true,
+      "decision_paths": {
+        "A": 35,
+        "B": 62
+      },
+      "decision_timeouts": {
+        "15": 97
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 112,
+        "B": 346
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 1720,
+      "run": "20261023-083951-B-failure-seed2",
+      "seed": 2,
+      "timeout_counts": {
+        "15": 1720
+      },
+      "variant": "B",
+      "workload": "failure"
+    },
+    {
+      "agreement_agree": 288,
+      "agreement_agreement": 0.8888888888888888,
+      "agreement_checked": 324,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 324,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 324,
+      "complete": true,
+      "decision_paths": {
+        "A": 28,
+        "B": 70
+      },
+      "decision_timeouts": {
+        "15": 14,
+        "5": 64,
+        "60": 20
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 3,
+      "path_counts": {
+        "A": 124,
+        "B": 200
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 1172,
+      "run": "20261023-084133-C-failure-seed2",
+      "seed": 2,
+      "timeout_counts": {
+        "15": 464,
+        "5": 588,
+        "60": 120
+      },
+      "variant": "C",
+      "workload": "failure"
+    },
+    {
+      "agreement_agree": 78,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 78,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 78,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 78,
+      "complete": true,
+      "decision_paths": {
+        "A": 98
+      },
+      "decision_timeouts": {
+        "15": 98
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 78
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 234,
+      "run": "20261023-084316-A-light-seed3",
+      "seed": 3,
+      "timeout_counts": {
+        "15": 234
+      },
+      "variant": "A",
+      "workload": "light"
+    },
+    {
+      "agreement_agree": 78,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 78,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 78,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 78,
+      "complete": true,
+      "decision_paths": {
+        "A": 88,
+        "B": 10
+      },
+      "decision_timeouts": {
+        "15": 98
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "B": 78
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 312,
+      "run": "20261023-084458-B-light-seed3",
+      "seed": 3,
+      "timeout_counts": {
+        "15": 312
+      },
+      "variant": "B",
+      "workload": "light"
+    },
+    {
+      "agreement_agree": 78,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 78,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 78,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 78,
+      "complete": true,
+      "decision_paths": {
+        "A": 83,
+        "B": 14
+      },
+      "decision_timeouts": {
+        "15": 14,
+        "5": 78,
+        "60": 5
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "B": 78
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 312,
+      "run": "20261023-084641-C-light-seed3",
+      "seed": 3,
+      "timeout_counts": {
+        "15": 312
+      },
+      "variant": "C",
+      "workload": "light"
+    },
+    {
+      "agreement_agree": 120,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 120,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 120,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 120,
+      "complete": true,
+      "decision_paths": {
+        "A": 97
+      },
+      "decision_timeouts": {
+        "15": 97
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 120
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 360,
+      "run": "20261023-084823-A-heavy-seed3",
+      "seed": 3,
+      "timeout_counts": {
+        "15": 360
+      },
+      "variant": "A",
+      "workload": "heavy"
+    },
+    {
+      "agreement_agree": 120,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 120,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 120,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 120,
+      "complete": true,
+      "decision_paths": {
+        "A": 84,
+        "B": 13
+      },
+      "decision_timeouts": {
+        "15": 97
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 42,
+        "B": 78
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 438,
+      "run": "20261023-085004-B-heavy-seed3",
+      "seed": 3,
+      "timeout_counts": {
+        "15": 438
+      },
+      "variant": "B",
+      "workload": "heavy"
+    },
+    {
+      "agreement_agree": 120,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 120,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 120,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 120,
+      "complete": true,
+      "decision_paths": {
+        "A": 13,
+        "B": 84
+      },
+      "decision_timeouts": {
+        "15": 14,
+        "5": 8,
+        "60": 75
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "B": 120
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 480,
+      "run": "20261023-085146-C-heavy-seed3",
+      "seed": 3,
+      "timeout_counts": {
+        "15": 480
+      },
+      "variant": "C",
+      "workload": "heavy"
+    },
+    {
+      "agreement_agree": 336,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 336,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 336,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 336,
+      "complete": true,
+      "decision_paths": {
+        "A": 98
+      },
+      "decision_timeouts": {
+        "15": 98
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 336
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 1008,
+      "run": "20261023-085328-A-churn-seed3",
+      "seed": 3,
+      "timeout_counts": {
+        "15": 1008
+      },
+      "variant": "A",
+      "workload": "churn"
+    },
+    {
+      "agreement_agree": 342,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 342,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 342,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 342,
+      "complete": true,
+      "decision_paths": {
+        "A": 50,
+        "B": 47
+      },
+      "decision_timeouts": {
+        "15": 97
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 202,
+        "B": 140
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 1166,
+      "run": "20261023-085510-B-churn-seed3",
+      "seed": 3,
+      "timeout_counts": {
+        "15": 1166
+      },
+      "variant": "B",
+      "workload": "churn"
+    },
+    {
+      "agreement_agree": 374,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 374,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 374,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 374,
+      "complete": true,
+      "decision_paths": {
+        "A": 56,
+        "B": 42
+      },
+      "decision_timeouts": {
+        "15": 36,
+        "5": 34,
+        "60": 28
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 3,
+      "path_counts": {
+        "A": 166,
+        "B": 208
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 1330,
+      "run": "20261023-085652-C-churn-seed3",
+      "seed": 3,
+      "timeout_counts": {
+        "15": 400,
+        "5": 218,
+        "60": 712
+      },
+      "variant": "C",
+      "workload": "churn"
+    },
+    {
+      "agreement_agree": 458,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 458,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 458,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 458,
+      "complete": true,
+      "decision_paths": {
+        "A": 72,
+        "B": 25
+      },
+      "decision_timeouts": {
+        "15": 97
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 278,
+        "B": 180
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 1554,
+      "run": "20261023-085835-A-failure-seed3",
+      "seed": 3,
+      "timeout_counts": {
+        "15": 1554
+      },
+      "variant": "A",
+      "workload": "failure"
+    },
+    {
+      "agreement_agree": 434,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 434,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 434,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 434,
+      "complete": true,
+      "decision_paths": {
+        "A": 20,
+        "B": 78
+      },
+      "decision_timeouts": {
+        "15": 98
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 64,
+        "B": 370
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 1672,
+      "run": "20261023-090017-B-failure-seed3",
+      "seed": 3,
+      "timeout_counts": {
+        "15": 1672
+      },
+      "variant": "B",
+      "workload": "failure"
+    },
+    {
+      "agreement_agree": 478,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 478,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 478,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 478,
+      "complete": true,
+      "decision_paths": {
+        "A": 19,
+        "B": 79
+      },
+      "decision_timeouts": {
+        "15": 74,
+        "5": 12,
+        "60": 12
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 2,
+      "path_counts": {
+        "A": 32,
+        "B": 446
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 1884,
+      "run": "20261023-090159-C-failure-seed3",
+      "seed": 3,
+      "timeout_counts": {
+        "15": 1564,
+        "60": 320
+      },
+      "variant": "C",
+      "workload": "failure"
+    },
+    {
+      "agreement_agree": 78,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 78,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 78,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 78,
+      "complete": true,
+      "decision_paths": {
+        "A": 97
+      },
+      "decision_timeouts": {
+        "15": 97
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 78
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 234,
+      "run": "20261023-090342-A-light-seed4",
+      "seed": 4,
+      "timeout_counts": {
+        "15": 234
+      },
+      "variant": "A",
+      "workload": "light"
+    },
+    {
+      "agreement_agree": 78,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 78,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 78,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 78,
+      "complete": true,
+      "decision_paths": {
+        "A": 15,
+        "B": 82
+      },
+      "decision_timeouts": {
+        "15": 97
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "B": 78
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 312,
+      "run": "20261023-090524-B-light-seed4",
+      "seed": 4,
+      "timeout_counts": {
+        "15": 312
+      },
+      "variant": "B",
+      "workload": "light"
+    },
+    {
+      "agreement_agree": 74,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 74,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 74,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 74,
+      "complete": true,
+      "decision_paths": {
+        "A": 11,
+        "B": 87
+      },
+      "decision_timeouts": {
+        "15": 84,
+        "5": 8,
+        "60": 6
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "B": 74
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 296,
+      "run": "20261023-090706-C-light-seed4",
+      "seed": 4,
+      "timeout_counts": {
+        "5": 296
+      },
+      "variant": "C",
+      "workload": "light"
+    },
+    {
+      "agreement_agree": 120,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 120,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 120,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 120,
+      "complete": true,
+      "decision_paths": {
+        "A": 98
+      },
+      "decision_timeouts": {
+        "15": 98
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 120
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 360,
+      "run": "20261023-090848-A-heavy-seed4",
+      "seed": 4,
+      "timeout_counts": {
+        "15": 360
+      },
+      "variant": "A",
+      "workload": "heavy"
+    },
+    {
+      "agreement_agree": 120,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 120,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 120,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 120,
+      "complete": true,
+      "decision_paths": {
+        "A": 19,
+        "B": 79
+      },
+      "decision_timeouts": {
+        "15": 98
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 36,
+        "B": 84
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 444,
+      "run": "20261023-091031-B-heavy-seed4",
+      "seed": 4,
+      "timeout_counts": {
+        "15": 444
+      },
+      "variant": "B",
+      "workload": "heavy"
+    },
+    {
+      "agreement_agree": 112,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 112,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 112,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 112,
+      "complete": true,
+      "decision_paths": {
+        "A": 88,
+        "B": 9
+      },
+      "decision_timeouts": {
+        "15": 7,
+        "5": 83,
+        "60": 7
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 36,
+        "B": 76
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 412,
+      "run": "20261023-091214-C-heavy-seed4",
+      "seed": 4,
+      "timeout_counts": {
+        "5": 412
+      },
+      "variant": "C",
+      "workload": "heavy"
+    },
+    {
+      "agreement_agree": 380,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 380,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 380,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 380,
+      "complete": true,
+      "decision_paths": {
+        "A": 97
+      },
+      "decision_timeouts": {
+        "15": 97
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 380
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 1140,
+      "run": "20261023-091356-A-churn-seed4",
+      "seed": 4,
+      "timeout_counts": {
+        "15": 1140
+      },
+      "variant": "A",
+      "workload": "churn"
+    },
+    {
+      "agreement_agree": 380,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 380,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 380,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 380,
+      "complete": true,
+      "decision_paths": {
+        "A": 52,
+        "B": 46
+      },
+      "decision_timeouts": {
+        "15": 98
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 196,
+        "B": 184
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 1324,
+      "run": "20261023-091537-B-churn-seed4",
+      "seed": 4,
+      "timeout_counts": {
+        "15": 1324
+      },
+      "variant": "B",
+      "workload": "churn"
+    },
+    {
+      "agreement_agree": 392,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 392,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 392,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 392,
+      "complete": true,
+      "decision_paths": {
+        "A": 54,
+        "B": 43
+      },
+      "decision_timeouts": {
+        "15": 26,
+        "5": 38,
+        "60": 33
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 3,
+      "path_counts": {
+        "A": 266,
+        "B": 126
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 1302,
+      "run": "20261023-091720-C-churn-seed4",
+      "seed": 4,
+      "timeout_counts": {
+        "15": 220,
+        "5": 406,
+        "60": 676
+      },
+      "variant": "C",
+      "workload": "churn"
+    },
+    {
+      "agreement_agree": 459,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 459,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 459,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 459,
+      "complete": true,
+      "decision_paths": {
+        "A": 72,
+        "B": 25
+      },
+      "decision_timeouts": {
+        "15": 97
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 286,
+        "B": 173
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 1553,
+      "run": "20261023-091902-A-failure-seed4",
+      "seed": 4,
+      "timeout_counts": {
+        "15": 1553
+      },
+      "variant": "A",
+      "workload": "failure"
+    },
+    {
+      "agreement_agree": 430,
+      "agreement_agreement": 0.9772727272727273,
+      "agreement_checked": 440,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 440,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 440,
+      "complete": true,
+      "decision_paths": {
+        "A": 22,
+        "B": 75
+      },
+      "decision_timeouts": {
+        "15": 97
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 72,
+        "B": 368
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 1688,
+      "run": "20261023-092043-B-failure-seed4",
+      "seed": 4,
+      "timeout_counts": {
+        "15": 1688
+      },
+      "variant": "B",
+      "workload": "failure"
+    },
+    {
+      "agreement_agree": 479,
+      "agreement_agreement": 0.9599198396793587,
+      "agreement_checked": 499,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 499,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 499,
+      "complete": true,
+      "decision_paths": {
+        "A": 31,
+        "B": 66
+      },
+      "decision_timeouts": {
+        "15": 56,
+        "5": 33,
+        "60": 8
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 3,
+      "path_counts": {
+        "A": 104,
+        "B": 395
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 1894,
+      "run": "20261023-092225-C-failure-seed4",
+      "seed": 4,
+      "timeout_counts": {
+        "15": 1026,
+        "5": 308,
+        "60": 560
+      },
+      "variant": "C",
+      "workload": "failure"
+    },
+    {
+      "agreement_agree": 78,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 78,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 78,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 78,
+      "complete": true,
+      "decision_paths": {
+        "A": 97
+      },
+      "decision_timeouts": {
+        "15": 97
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 78
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 234,
+      "run": "20261023-092407-A-light-seed5",
+      "seed": 5,
+      "timeout_counts": {
+        "15": 234
+      },
+      "variant": "A",
+      "workload": "light"
+    },
+    {
+      "agreement_agree": 78,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 78,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 78,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 78,
+      "complete": true,
+      "decision_paths": {
+        "A": 50,
+        "B": 48
+      },
+      "decision_timeouts": {
+        "15": 98
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 78
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 234,
+      "run": "20261023-092549-B-light-seed5",
+      "seed": 5,
+      "timeout_counts": {
+        "15": 234
+      },
+      "variant": "B",
+      "workload": "light"
+    },
+    {
+      "agreement_agree": 96,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 96,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 96,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 96,
+      "complete": true,
+      "decision_paths": {
+        "A": 86,
+        "B": 12
+      },
+      "decision_timeouts": {
+        "15": 10,
+        "5": 81,
+        "60": 7
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "B": 96
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 384,
+      "run": "20261023-092731-C-light-seed5",
+      "seed": 5,
+      "timeout_counts": {
+        "60": 384
+      },
+      "variant": "C",
+      "workload": "light"
+    },
+    {
+      "agreement_agree": 120,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 120,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 120,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 120,
+      "complete": true,
+      "decision_paths": {
+        "A": 98
+      },
+      "decision_timeouts": {
+        "15": 98
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 120
+      },
+      "policy_steps": 98,
+      "routed_rules_observed": 360,
+      "run": "20261023-092914-A-heavy-seed5",
+      "seed": 5,
+      "timeout_counts": {
+        "15": 360
+      },
+      "variant": "A",
+      "workload": "heavy"
+    },
+    {
+      "agreement_agree": 120,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 120,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 120,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 120,
+      "complete": true,
+      "decision_paths": {
+        "A": 50,
+        "B": 47
+      },
+      "decision_timeouts": {
+        "15": 97
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 120
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 360,
+      "run": "20261023-093057-B-heavy-seed5",
+      "seed": 5,
+      "timeout_counts": {
+        "15": 360
+      },
+      "variant": "B",
+      "workload": "heavy"
+    },
+    {
+      "agreement_agree": 112,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 112,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 112,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 112,
+      "complete": true,
+      "decision_paths": {
+        "A": 85,
+        "B": 12
+      },
+      "decision_timeouts": {
+        "15": 11,
+        "5": 78,
+        "60": 8
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 3,
+      "path_counts": {
+        "A": 40,
+        "B": 72
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 408,
+      "run": "20261023-093239-C-heavy-seed5",
+      "seed": 5,
+      "timeout_counts": {
+        "15": 144,
+        "5": 120,
+        "60": 144
+      },
+      "variant": "C",
+      "workload": "heavy"
+    },
+    {
+      "agreement_agree": 374,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 374,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 374,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 374,
+      "complete": true,
+      "decision_paths": {
+        "A": 97
+      },
+      "decision_timeouts": {
+        "15": 97
+      },
+      "distinct_paths": 1,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 374
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 1122,
+      "run": "20261023-093420-A-churn-seed5",
+      "seed": 5,
+      "timeout_counts": {
+        "15": 1122
+      },
+      "variant": "A",
+      "workload": "churn"
+    },
+    {
+      "agreement_agree": 371,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 371,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 371,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 371,
+      "complete": true,
+      "decision_paths": {
+        "A": 61,
+        "B": 36
+      },
+      "decision_timeouts": {
+        "15": 97
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 260,
+        "B": 111
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 1224,
+      "run": "20261023-093602-B-churn-seed5",
+      "seed": 5,
+      "timeout_counts": {
+        "15": 1224
+      },
+      "variant": "B",
+      "workload": "churn"
+    },
+    {
+      "agreement_agree": 417,
+      "agreement_agreement": 0.9742990654205608,
+      "agreement_checked": 428,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 428,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 428,
+      "complete": true,
+      "decision_paths": {
+        "A": 57,
+        "B": 40
+      },
+      "decision_timeouts": {
+        "15": 27,
+        "5": 47,
+        "60": 23
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 3,
+      "path_counts": {
+        "A": 188,
+        "B": 240
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 1524,
+      "run": "20261023-093744-C-churn-seed5",
+      "seed": 5,
+      "timeout_counts": {
+        "15": 292,
+        "5": 286,
+        "60": 946
+      },
+      "variant": "C",
+      "workload": "churn"
+    },
+    {
+      "agreement_agree": 468,
+      "agreement_agreement": 1.0,
+      "agreement_checked": 468,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 468,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 468,
+      "complete": true,
+      "decision_paths": {
+        "A": 72,
+        "B": 25
+      },
+      "decision_timeouts": {
+        "15": 97
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 288,
+        "B": 180
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 1584,
+      "run": "20261023-093926-A-failure-seed5",
+      "seed": 5,
+      "timeout_counts": {
+        "15": 1584
+      },
+      "variant": "A",
+      "workload": "failure"
+    },
+    {
+      "agreement_agree": 424,
+      "agreement_agreement": 0.9298245614035088,
+      "agreement_checked": 456,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 456,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 456,
+      "complete": true,
+      "decision_paths": {
+        "A": 25,
+        "B": 72
+      },
+      "decision_timeouts": {
+        "15": 97
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 1,
+      "path_counts": {
+        "A": 128,
+        "B": 328
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 1696,
+      "run": "20261023-094107-B-failure-seed5",
+      "seed": 5,
+      "timeout_counts": {
+        "15": 1696
+      },
+      "variant": "B",
+      "workload": "failure"
+    },
+    {
+      "agreement_agree": 358,
+      "agreement_agreement": 0.9470899470899471,
+      "agreement_checked": 378,
+      "agreement_skipped_pre_policy": 0,
+      "agreement_timeout_agree": 378,
+      "agreement_timeout_agreement": 1.0,
+      "agreement_timeout_checked": 378,
+      "complete": true,
+      "decision_paths": {
+        "A": 28,
+        "B": 69
+      },
+      "decision_timeouts": {
+        "15": 18,
+        "5": 67,
+        "60": 12
+      },
+      "distinct_paths": 2,
+      "distinct_timeouts": 3,
+      "path_counts": {
+        "A": 128,
+        "B": 250
+      },
+      "policy_steps": 97,
+      "routed_rules_observed": 1384,
+      "run": "20261023-094249-C-failure-seed5",
+      "seed": 5,
+      "timeout_counts": {
+        "15": 252,
+        "5": 722,
+        "60": 410
+      },
+      "variant": "C",
+      "workload": "failure"
+    }
+  ],
+  "runs_analysed": 60,
+  "runs_incomplete": 0
+}

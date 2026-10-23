@@ -1,0 +1,27 @@
+{
+  "runs_analysed": 60,
+  "runs_excluded_incomplete": 0,
+  "runs_found": 60,
+  "runs_per_cell": {
+    "churn": {
+      "A": 5,
+      "B": 5,
+      "C": 5
+    },
+    "failure": {
+      "A": 5,
+      "B": 5,
+      "C": 5
+    },
+    "heavy": {
+      "A": 5,
+      "B": 5,
+      "C": 5
+    },
+    "light": {
+      "A": 5,
+      "B": 5,
+      "C": 5
+    }
+  }
+}

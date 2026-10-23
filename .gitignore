@@ -15,6 +15,19 @@ results/runs/*
 analysis/out/*
 !analysis/out/.gitkeep
 
+# ...with an exception for the finished research deliverables. They are
+# regenerable in principle, but only from results/runs/, which is deliberately
+# not in git (large, machine-generated). Without these a clone would contain
+# the code that produces the findings but not the findings themselves.
+!analysis/out/REPORT.md
+!analysis/out/results.md
+!analysis/out/*.png
+!analysis/out/summary_*.csv
+!analysis/out/per_run_metrics.csv
+!analysis/out/behaviour_verification.json
+!analysis/out/diagnostics.json
+!analysis/out/aggregate_provenance.json
+
 # Learned Q-tables are run artefacts, not source
 *.qtable.json
 

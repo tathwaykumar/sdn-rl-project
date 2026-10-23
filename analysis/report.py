@@ -272,6 +272,33 @@ def build_report(out_dir: str, runs_root: str) -> str:
             continue
         A(f"### `{workload}`")
         A("")
+
+        # Latency is measured only over probes that came back. When two
+        # variants drop very different fractions of traffic, their RTT medians
+        # are computed over different populations and are not directly
+        # comparable -- a variant can look fast precisely because it discarded
+        # the packets that would have been slow. Say so where it applies
+        # rather than leaving the reader to infer it.
+        loss_values = {
+            v: agg_half[(workload, v)]["ping_loss_fraction"].median
+            for v in VARIANT_ORDER
+            if (workload, v) in agg_half
+            and agg_half[(workload, v)]["ping_loss_fraction"].n > 0
+        }
+        if len(loss_values) > 1:
+            spread = max(loss_values.values()) - min(loss_values.values())
+            if spread > 0.10:
+                detail = ", ".join(
+                    f"{v} {loss * 100:.0f}%" for v, loss in sorted(loss_values.items())
+                )
+                A(f"> **Read latency together with loss here.** Probe loss "
+                  f"differs substantially between variants ({detail}), so the "
+                  f"RTT medians below are computed over different populations "
+                  f"of surviving probes. A variant that drops more traffic can "
+                  f"show a lower median RTT without being better: the packets "
+                  f"that would have been slow were never delivered.")
+                A("")
+
         for variant in ("B", "C"):
             cell = agg_half.get((workload, variant))
             if not cell:
@@ -362,6 +389,19 @@ def build_report(out_dir: str, runs_root: str) -> str:
       "comparable with hardware testbed results. The relative comparison "
       "between variants is run on one host with identical seeded traffic and "
       "is the meaningful part.")
+    A("- **Latency and loss must be read together.** RTT is measured only over "
+      "probes that returned. Where loss rates differ sharply between variants, "
+      "the medians summarise different populations and a lower median can "
+      "reflect more aggressive dropping rather than better service. The "
+      "per-workload sections flag this where it applies.")
+    A("- **Check state coverage before reading the learning results.** The "
+      "table in section 7 reports how many of the 144 states each agent "
+      "actually visited. Where that number is small and the reward delta is "
+      "near zero, the measured differences between variants cannot be "
+      "attributed to a converged learned policy; they reflect the behaviour "
+      "the policy produced during the run, exploration included. The "
+      "null-control and action-shuffle diagnostics are the test that "
+      "separates those.")
     A("- **Variant C has a larger action space than B** on the same step budget, "
       "so less experience per action. If C does not beat B, that is partly an "
       "exploration-budget artefact and not purely evidence against joint control.")
