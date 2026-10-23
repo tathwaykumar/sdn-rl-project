@@ -1,0 +1,97 @@
+{
+  "by_condition": {
+    "frozen": {
+      "action_counts": {
+        "path=A,idle=5": 293
+      },
+      "distinct_actions_chosen": 1,
+      "distinct_installed_timeouts": 1,
+      "installed_path_counts": {
+        "A": 340
+      },
+      "installed_timeout_counts": {
+        "5": 1020
+      },
+      "mean_reward": -0.06585393174061434,
+      "nonzero_q_entries_total": 0.0,
+      "q_updates_total": 0.0,
+      "runs": 3
+    },
+    "shuffled": {
+      "action_counts": {
+        "path=A,idle=15": 16,
+        "path=A,idle=5": 92,
+        "path=A,idle=60": 8,
+        "path=B,idle=15": 83,
+        "path=B,idle=5": 11,
+        "path=B,idle=60": 81
+      },
+      "distinct_actions_chosen": 6,
+      "distinct_installed_timeouts": 2,
+      "installed_path_counts": {
+        "A": 98,
+        "B": 282
+      },
+      "installed_timeout_counts": {
+        "15": 1134,
+        "60": 288
+      },
+      "mean_reward": 0.339589560137457,
+      "nonzero_q_entries_total": 28.0,
+      "q_updates_total": 288.0,
+      "runs": 3
+    },
+    "trained": {
+      "action_counts": {
+        "path=A,idle=15": 18,
+        "path=A,idle=5": 91,
+        "path=A,idle=60": 8,
+        "path=B,idle=15": 83,
+        "path=B,idle=5": 11,
+        "path=B,idle=60": 81
+      },
+      "distinct_actions_chosen": 6,
+      "distinct_installed_timeouts": 3,
+      "installed_path_counts": {
+        "A": 116,
+        "B": 234
+      },
+      "installed_timeout_counts": {
+        "15": 722,
+        "5": 418,
+        "60": 144
+      },
+      "mean_reward": 0.43744168835616437,
+      "nonzero_q_entries_total": 31.0,
+      "q_updates_total": 289.0,
+      "runs": 3
+    }
+  },
+  "claims": [
+    {
+      "claim": "Frozen agent performs no Q updates",
+      "detail": "updates=0, nonzero Q entries=0",
+      "result": "PASS"
+    },
+    {
+      "claim": "Frozen agent collapses to a single action",
+      "detail": "distinct actions chosen: {'path=A,idle=5': 293}",
+      "result": "PASS"
+    },
+    {
+      "claim": "Trained agent explores more actions than the frozen control",
+      "detail": "trained=6 distinct actions, frozen=1",
+      "result": "PASS"
+    },
+    {
+      "claim": "Trained and frozen differ in what they install",
+      "detail": "trained paths={'B': 234, 'A': 116} timeouts={'5': 418, '15': 722, '60': 144} | frozen paths={'A': 340} timeouts={'5': 1020}",
+      "result": "PASS"
+    },
+    {
+      "claim": "Shuffling the action mapping changes dataplane behaviour",
+      "detail": "trained paths={'B': 234, 'A': 116} timeouts={'5': 418, '15': 722, '60': 144} | shuffled paths={'B': 282, 'A': 98} timeouts={'15': 1134, '60': 288}",
+      "result": "PASS"
+    }
+  ]
+}

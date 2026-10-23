@@ -359,6 +359,64 @@ def build_report(out_dir: str, runs_root: str) -> str:
       "a run for reasons unrelated to the policy.")
     A("")
 
+    # ------------------------------------------------------- control experiments
+    diagnostics = load_json(os.path.join(out_dir, "diagnostics.json"))
+    if diagnostics:
+        A("## 7b. Control experiments: do the learned values matter?")
+        A("")
+        A("The results above show the variants differ. They cannot, on their "
+          "own, show that the difference comes from the *learned Q-values* "
+          "rather than from some incidental property of the RL code path. "
+          "Three conditions separate those, run on the same workload with the "
+          "same seeds:")
+        A("")
+        A("| Condition | Distinct actions | Q updates | Paths installed | Timeouts installed | Mean reward |")
+        A("|---|---|---|---|---|---|")
+        for name in ("trained", "frozen", "shuffled"):
+            cell = diagnostics["by_condition"].get(name)
+            if not cell:
+                continue
+            reward = cell.get("mean_reward")
+            A(
+                f"| `{name}` | {cell['distinct_actions_chosen']} | "
+                f"{cell['q_updates_total']:.0f} | "
+                f"{cell['installed_path_counts']} | "
+                f"{cell['installed_timeout_counts']} | "
+                f"{'n/a' if reward is None else f'{reward:+.4f}'} |"
+            )
+        A("")
+        for claim in diagnostics.get("claims", []):
+            A(f"- **{claim['result']}** — {claim['claim']}  \n  {claim['detail']}")
+        A("")
+        A("**What this establishes.** The frozen control runs the entire RL "
+          "code path with an all-zero table and no exploration. It collapses "
+          "to a single action, installs only one path and one timeout class, "
+          "and scores far below the trained agent. So the gain is not an "
+          "artefact of the machinery: acting over the action space is doing "
+          "real work. Shuffling the action mapping visibly changes what the "
+          "switches hold, which confirms the actions reach the dataplane "
+          "rather than only the logs.")
+        A("")
+        A("**What this does not establish.** The shuffled agent learns "
+          "normally but its action indices map to different dataplane "
+          "effects, so its learned values are meaningless by construction -- "
+          "yet it scores close to the trained agent. Combined with the sparse "
+          "state coverage in section 7 (a handful of the 144 states visited, "
+          "reward deltas near zero within a run), the most defensible reading "
+          "is that most of the benefit here comes from *distributing traffic "
+          "across both paths and several timeout classes at all*, rather than "
+          "from having learned which action is best in which state. A "
+          "well-chosen static multi-path policy might capture much of the "
+          "same gain. Establishing that the learned mapping specifically "
+          "matters would need far longer runs, better state coverage, and a "
+          "train-then-freeze evaluation -- none of which the 90-second budget "
+          "used here allows. This is a limitation of the experiment, not a "
+          "claim about reinforcement learning in general.")
+        A("")
+        A(f"*(n = 3 seeds per condition; too few for a significance claim, "
+          f"and reported as a direction rather than a result.)*")
+        A("")
+
     # ----------------------------------------------------------------- figures
     A("## 8. Figures")
     A("")
