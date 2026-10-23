@@ -1,0 +1,335 @@
+/** Experiment control.
+ *
+ * The form is built from the backend's own option list, which comes from the
+ * runner's tables, so the UI cannot offer a variant or workload the runner
+ * does not implement.
+ *
+ * Starting is blocked whenever anything is already running -- including a
+ * matrix sweep started from a terminal -- because Mininet, Open vSwitch and
+ * TCP 6653 are exclusive. When the API is unprivileged (the normal case, since
+ * a web service should not run as root), the exact command is shown instead of
+ * a button that would fail.
+ */
+import { useEffect, useState } from "react";
+import { api } from "../api/client";
+import { useAsync } from "../hooks/useLive";
+import type { ExperimentOptions, ExperimentStatus } from "../api/types";
+import {
+  Button, Card, Empty, ErrorBox, Field, Pill, Skeleton, SourceBadge, StatusDot,
+  VARIANT_COLOR, cx, fmtDuration, inputClass, inputStyle,
+} from "../components/ui";
+
+export function ExperimentsView() {
+  const options = useAsync<ExperimentOptions>(() => api.experimentOptions(), []);
+  const status = useAsync<ExperimentStatus>(() => api.experimentStatus(), [], 3000);
+  const log = useAsync(() => api.experimentLog(300), [], 3000);
+
+  const [variant, setVariant] = useState("C");
+  const [workload, setWorkload] = useState("heavy");
+  const [seed, setSeed] = useState(1);
+  const [duration, setDuration] = useState(90);
+  const [idleTimeout, setIdleTimeout] = useState<number | "">("");
+  const [command, setCommand] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  useEffect(() => {
+    if (!options.data) return;
+    api
+      .experimentCommand({
+        variant, workload, seed, duration_s: duration,
+        idle_timeout: idleTimeout === "" ? null : Number(idleTimeout),
+      })
+      .then((r) => setCommand(r.command))
+      .catch(() => setCommand(null));
+  }, [variant, workload, seed, duration, idleTimeout, options.data]);
+
+  if (options.loading && !options.data) {
+    return <Card title="Experiment control"><Skeleton rows={6} /></Card>;
+  }
+  if (options.error) {
+    return <Card title="Experiment control"><ErrorBox message={options.error} onRetry={options.refresh} /></Card>;
+  }
+
+  const opts = options.data!;
+  const st = status.data;
+  const selectsOwnTimeout = opts.variants.find((v) => v.id === variant)?.selects_own_timeout;
+  const canStart = st?.can_start ?? false;
+  const launched = st?.launched_by_dashboard as Record<string, unknown> | null;
+  const dashboardRunning = Boolean(launched && launched.running);
+
+  const start = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await api.experimentStart({
+        variant, workload, seed, duration_s: duration,
+        idle_timeout: idleTimeout === "" ? null : Number(idleTimeout),
+      });
+      setMessage({ kind: "ok", text: "Experiment started." });
+      void status.refresh();
+    } catch (cause) {
+      setMessage({ kind: "err", text: cause instanceof Error ? cause.message : String(cause) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const stop = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await api.experimentStop();
+      setMessage({ kind: "ok", text: String(result.note ?? "Experiment stopped.") });
+      void status.refresh();
+    } catch (cause) {
+      setMessage({ kind: "err", text: cause instanceof Error ? cause.message : String(cause) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-[400px_1fr] gap-4">
+      <div className="flex flex-col gap-4">
+        <Card title="Start a run" subtitle="Invokes experiments/run_experiment.py directly">
+          <div className="space-y-3">
+            <Field label="Variant">
+              <div className="grid grid-cols-3 gap-1.5">
+                {opts.variants.map((v) => (
+                  <button
+                    key={v.id}
+                    onClick={() => setVariant(v.id)}
+                    title={v.label}
+                    className={cx(
+                      "rounded-lg border px-2 py-2 text-[12px] font-semibold transition-colors",
+                      variant === v.id && "ring-1",
+                    )}
+                    style={{
+                      background: variant === v.id ? "var(--surface-3)" : "var(--surface-2)",
+                      borderColor: variant === v.id ? VARIANT_COLOR[v.id] : "var(--border-2)",
+                      color: variant === v.id ? VARIANT_COLOR[v.id] : "var(--text-2)",
+                    }}
+                  >
+                    {v.id}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] mt-1" style={{ color: "var(--text-3)" }}>
+                {opts.variants.find((v) => v.id === variant)?.label}
+              </p>
+            </Field>
+
+            <Field
+              label="Workload"
+              hint={opts.workloads.find((w) => w.id === workload)?.description}
+            >
+              <select
+                value={workload}
+                onChange={(e) => setWorkload(e.target.value)}
+                className={inputClass}
+                style={inputStyle}
+              >
+                {opts.workloads.map((w) => (
+                  <option key={w.id} value={w.id}>{w.id}</option>
+                ))}
+              </select>
+            </Field>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Seed">
+                <input
+                  type="number" value={seed}
+                  min={opts.seed.min} max={opts.seed.max}
+                  onChange={(e) => setSeed(Number(e.target.value))}
+                  className={inputClass} style={inputStyle}
+                />
+              </Field>
+              <Field label={`Duration (${opts.duration.unit})`}>
+                <input
+                  type="number" value={duration}
+                  min={opts.duration.min} max={opts.duration.max}
+                  onChange={(e) => setDuration(Number(e.target.value))}
+                  className={inputClass} style={inputStyle}
+                />
+              </Field>
+            </div>
+
+            <Field
+              label="Fixed idle timeout"
+              hint={
+                selectsOwnTimeout
+                  ? "Variant C selects its own idle timeout, so this control does not apply."
+                  : "Applied to every rule for the whole run."
+              }
+            >
+              <select
+                value={idleTimeout}
+                disabled={selectsOwnTimeout}
+                onChange={(e) =>
+                  setIdleTimeout(e.target.value === "" ? "" : Number(e.target.value))
+                }
+                className={cx(inputClass, selectsOwnTimeout && "opacity-40")}
+                style={inputStyle}
+              >
+                <option value="">runner default (15 s)</option>
+                {opts.idle_timeouts.map((t) => (
+                  <option key={t} value={t}>{t} s</option>
+                ))}
+              </select>
+            </Field>
+
+            <div className="flex gap-2 pt-1">
+              <Button variant="primary" onClick={start} disabled={!canStart || busy}>
+                {busy ? "Working…" : "Start experiment"}
+              </Button>
+              <Button variant="danger" onClick={stop} disabled={!dashboardRunning || busy}>
+                Stop
+              </Button>
+            </div>
+
+            {st?.blocked_reason && (
+              <div
+                className="rounded-lg border px-3 py-2 text-[11px] leading-relaxed"
+                style={{
+                  borderColor: "rgba(201,133,0,0.35)",
+                  background: "rgba(201,133,0,0.08)",
+                  color: "#e0b45a",
+                }}
+              >
+                {st.blocked_reason}
+              </div>
+            )}
+
+            {message && (
+              <div
+                className="rounded-lg border px-3 py-2 text-[11px] leading-relaxed"
+                style={{
+                  borderColor: message.kind === "ok"
+                    ? "rgba(46,163,107,0.35)" : "rgba(224,82,82,0.35)",
+                  background: message.kind === "ok"
+                    ? "rgba(46,163,107,0.08)" : "rgba(224,82,82,0.08)",
+                  color: message.kind === "ok" ? "#6fd3a3" : "#f0a3a3",
+                }}
+              >
+                {message.text}
+              </div>
+            )}
+
+            {command && (
+              <div>
+                <p className="text-[10px] mb-1" style={{ color: "var(--text-3)" }}>
+                  Equivalent command (run from the project root)
+                </p>
+                <code
+                  className="block mono text-[10px] rounded-lg border px-2.5 py-2 break-all"
+                  style={{ background: "var(--surface-0)", borderColor: "var(--border-1)" }}
+                >
+                  {command}
+                </code>
+              </div>
+            )}
+          </div>
+        </Card>
+
+        <Card title="Link failure" subtitle="How failures are injected">
+          <p className="text-[11px] leading-relaxed" style={{ color: "var(--text-3)" }}>
+            Link failure is not a separate button. The runner owns the Mininet
+            session, so a link can only be cut from inside it — the{" "}
+            <span className="mono">failure</span> workload brings{" "}
+            <span className="mono">s1-s2</span> down partway through the run and
+            restores it later. Choose that workload to exercise recovery; the
+            topology view and event log show the real failure when it happens.
+          </p>
+        </Card>
+      </div>
+
+      <div className="flex flex-col gap-4">
+        <Card
+          title="Current activity"
+          right={<SourceBadge source="live" />}
+        >
+          {!st ? (
+            <Skeleton rows={3} />
+          ) : st.live_run.active ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <StatusDot tone="ok" pulse />
+                <span className="text-[13px] font-semibold">
+                  {st.live_run.variant} · {st.live_run.workload} · seed {st.live_run.seed}
+                </span>
+                {st.live_run.matrix_running && <Pill color="var(--warn)">matrix sweep</Pill>}
+              </div>
+              <p className="text-[11px] mono" style={{ color: "var(--text-3)" }}>
+                {st.live_run.run_id}
+              </p>
+              {st.live_run.elapsed_s !== null && st.live_run.duration_s && (
+                <div>
+                  <div className="flex justify-between text-[10px] mb-1"
+                       style={{ color: "var(--text-3)" }}>
+                    <span>{fmtDuration(st.live_run.elapsed_s)} elapsed</span>
+                    <span>of {fmtDuration(st.live_run.duration_s)}</span>
+                  </div>
+                  <div className="h-1.5 rounded-full" style={{ background: "var(--surface-3)" }}>
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${Math.min(100, (st.live_run.elapsed_s / st.live_run.duration_s) * 100)}%`,
+                        background: "var(--ok)",
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+              <p className="text-[11px]" style={{ color: "var(--text-3)" }}>
+                {st.live_run.detail}
+              </p>
+              {st.external_experiment_running && (
+                <p className="text-[11px] leading-relaxed pt-1" style={{ color: "var(--warn)" }}>
+                  This run was started outside the dashboard, so it cannot be
+                  stopped from here. Stop it in the terminal that owns it.
+                </p>
+              )}
+            </div>
+          ) : (
+            <Empty title="Nothing running" detail="No experiment process is active." />
+          )}
+        </Card>
+
+        <Card
+          title="Runner output"
+          subtitle="Only for experiments started from this dashboard"
+          bodyClassName="p-0"
+        >
+          {log.data?.available ? (
+            <pre
+              className="mono text-[10px] p-3 overflow-auto leading-relaxed"
+              style={{ maxHeight: 320, color: "var(--text-2)" }}
+            >
+              {(log.data.lines ?? []).join("\n") || "(no output yet)"}
+            </pre>
+          ) : (
+            <Empty
+              title="No dashboard-launched run"
+              detail={log.data?.reason ?? "Start an experiment here to see its output."}
+            />
+          )}
+        </Card>
+
+        {st?.external_processes && st.external_processes.length > 0 && (
+          <Card title="Detected experiment processes" subtitle="Protected from the dashboard">
+            <div className="space-y-1.5">
+              {st.external_processes.map((p) => (
+                <div key={p.pid} className="text-[10px] mono flex gap-2">
+                  <span style={{ color: "var(--text-3)" }}>pid {p.pid}</span>
+                  <span className="truncate flex-1" title={p.cmd}>{p.cmd}</span>
+                  <span style={{ color: "var(--text-3)" }}>{fmtDuration(p.elapsed_s)}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+}

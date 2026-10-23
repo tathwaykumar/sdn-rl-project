@@ -284,6 +284,33 @@ See `docs/LIMITATIONS.md` for what this setup cannot measure and
 
 ---
 
+## 9b. Interactive dashboard
+
+A web dashboard shows the live topology, switch flow tables, RL decisions, live
+metrics and A/B/C comparisons:
+
+```bash
+./dashboard/run_dashboard.sh          # live mode
+./dashboard/run_dashboard.sh --mock   # demo mode, clearly-labelled synthetic data
+```
+
+Then open <http://127.0.0.1:5173>.
+
+It reads the telemetry the controller and runner already write to disk and
+issues **no OpenFlow requests of its own**, so it cannot distort the
+controller-message metric this project measures and is safe to open while an
+experiment is running. It runs unprivileged: experiments can only be launched
+from the browser if the API itself is started as root, and otherwise it prints
+the exact command to run instead.
+
+A path is drawn as active only once rules for it are observed on the switches —
+the agent choosing a path never colours it.
+
+See `dashboard/README.md` for the interface guide, API reference, security notes
+and limitations.
+
+---
+
 ## 10. Troubleshooting
 
 **"port 6653 is already in use"** — a controller from an interrupted run is still

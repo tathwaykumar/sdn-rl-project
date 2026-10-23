@@ -29,3 +29,10 @@ analysis/out/*
 
 # Smoke-test scratch output (regenerate with experiments/smoke.py)
 results/smoke/
+
+# Dashboard
+dashboard/frontend/node_modules/
+dashboard/frontend/dist/
+dashboard/frontend/.vite/
+results/dashboard_logs/
+results/dashboard_api.log
