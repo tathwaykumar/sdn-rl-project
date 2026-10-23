@@ -49,7 +49,67 @@ class ControllerProcess:
         self._log_fh = None
 
     # ------------------------------------------------------------------ start
+    def port_in_use(self) -> bool:
+        try:
+            with socket.create_connection((self.listen_host, self.port), timeout=0.5):
+                return True
+        except OSError:
+            return False
+
+    @staticmethod
+    def kill_stale_controllers() -> int:
+        """Kill leftover launcher processes from previous runs.
+
+        This is not housekeeping, it is correctness.  A controller orphaned by
+        an interrupted run keeps the OpenFlow port bound; the next run's
+        controller then fails to bind, its listener thread dies, and Mininet
+        happily connects to the *old* controller instead.  Everything looks
+        healthy and the entire run measures stale code.  That happened during
+        development and silently invalidated several runs, so every run now
+        starts by clearing the ground.
+
+        The pattern is specific to this project's launcher module, so it cannot
+        match unrelated user processes.
+        """
+        killed = 0
+        pattern = "controller.launcher"
+        try:
+            out = subprocess.run(["ps", "-eo", "pid,cmd"], capture_output=True, text=True)
+            me = os.getpid()
+            for line in out.stdout.splitlines():
+                if pattern not in line or "grep" in line:
+                    continue
+                parts = line.split(None, 1)
+                if len(parts) != 2:
+                    continue
+                try:
+                    pid = int(parts[0])
+                except ValueError:
+                    continue
+                if pid == me:
+                    continue
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                    killed += 1
+                except (ProcessLookupError, PermissionError):
+                    pass
+        except Exception:
+            pass
+        if killed:
+            time.sleep(1.0)  # let the port be released
+        return killed
+
     def start(self) -> None:
+        stale = self.kill_stale_controllers()
+        if stale:
+            print(f"  (cleared {stale} stale controller process(es))")
+        if self.port_in_use():
+            raise RuntimeError(
+                f"port {self.port} is already in use by something that is not ours; "
+                "refusing to start, because Mininet would connect to that process "
+                "instead and the run would silently measure the wrong controller"
+            )
+
         env = dict(os.environ)
         env["SDNRL_CONFIG"] = self.config_path
         env["PYTHONPATH"] = self.project_root + os.pathsep + env.get("PYTHONPATH", "")

@@ -137,6 +137,8 @@ class Snapshot:
     total_rules: int = 0
     occupancy_fraction: float = 0.0
     rule_hit_packets: int = 0
+    #: Cross-check from the installed rules' own counters; see derive().
+    installed_rule_packets: int = 0
     table_lookups: int = 0
     table_matches: int = 0
     table_misses: int = 0
@@ -161,6 +163,7 @@ class Snapshot:
             "total_rules": self.total_rules,
             "occupancy_fraction": round(self.occupancy_fraction, 6),
             "rule_hit_packets": self.rule_hit_packets,
+            "installed_rule_packets": self.installed_rule_packets,
             "table_lookups": self.table_lookups,
             "table_matches": self.table_matches,
             "table_misses": self.table_misses,
@@ -183,6 +186,7 @@ SNAPSHOT_FIELDS: Tuple[str, ...] = (
     *(f"util_{n}" for n in spec.PATH_NAMES),
     "max_link_util", "delivered_bps", "offered_bps", "loss_fraction",
     "total_rules", "occupancy_fraction", "rule_hit_packets",
+    "installed_rule_packets",
     "table_lookups", "table_matches", "table_misses", "miss_rate_per_s",
     "rule_hit_ratio", "controller_msg_rate", "packet_in_rate", "flow_mod_rate",
     "note",
@@ -284,36 +288,7 @@ def derive(
         ]
         snap.occupancy_fraction = sum(per_switch) / len(per_switch)
 
-    # ---- hits vs misses, from the flow entries themselves ----------------
-    hit_packets = 0
-    miss_packets = 0
-    for sw, cur_pkts in current.pkts_installed.items():
-        prev_pkts = previous.pkts_installed.get(sw)
-        if prev_pkts is None:
-            continue
-        d = _delta(cur_pkts, prev_pkts)
-        if d is None:
-            # Installed rules expire and are replaced, so this counter is not
-            # monotonic across rule churn. A decrease means rules aged out; the
-            # interval carries no usable hit count rather than a bogus one.
-            notes.append(f"installed-rule counter went backwards on {sw}")
-            continue
-        hit_packets += d
-    for sw, cur_pkts in current.pkts_miss.items():
-        prev_pkts = previous.pkts_miss.get(sw)
-        if prev_pkts is None:
-            continue
-        d = _delta(cur_pkts, prev_pkts)
-        if d is not None:
-            miss_packets += d
-
-    snap.rule_hit_packets = hit_packets
-    snap.table_misses = miss_packets
-    snap.miss_rate_per_s = miss_packets / dt
-    total_lookups = hit_packets + miss_packets
-    snap.rule_hit_ratio = (hit_packets / total_lookups) if total_lookups else None
-
-    # ---- raw table stats, recorded but not used for the miss count -------
+    # ---- table-level counters (monotonic since switch start) -------------
     lookups = matches = 0
     for sw, cur_tbl in current.tables.items():
         prev_tbl = previous.tables.get(sw)
@@ -328,6 +303,44 @@ def derive(
         matches += d_match
     snap.table_lookups = lookups
     snap.table_matches = matches
+
+    # ---- misses: the priority-0 entry's own packet counter ----------------
+    # That entry is installed once with no timeout and is never replaced, so
+    # its counter is monotonic for the whole run and safe to difference.
+    miss_packets = 0
+    for sw, cur_pkts in current.pkts_miss.items():
+        prev_pkts = previous.pkts_miss.get(sw)
+        if prev_pkts is None:
+            continue
+        d = _delta(cur_pkts, prev_pkts)
+        if d is not None:
+            miss_packets += d
+    snap.table_misses = miss_packets
+    snap.miss_rate_per_s = miss_packets / dt
+
+    # ---- hits: derived from lookups, not from the installed-rule counters.
+    # Installed rules expire and are replaced constantly under a churn
+    # workload, so summing their packet counters is not monotonic and loses
+    # whole intervals. ``lookup_count`` counts every packet entering the
+    # table and survives rule churn, so hits = lookups - misses is both
+    # robust and exact. (A negligible number of lookups are IPv6 frames
+    # caught by the priority-1 discard rule; see controller/base_app.py.)
+    snap.rule_hit_packets = max(0, lookups - miss_packets)
+    snap.rule_hit_ratio = (snap.rule_hit_packets / lookups) if lookups else None
+
+    # Best-effort cross-check from the installed rules themselves. Recorded,
+    # not relied upon, precisely because of the churn problem above.
+    installed_delta = 0
+    for sw, cur_pkts in current.pkts_installed.items():
+        prev_pkts = previous.pkts_installed.get(sw)
+        if prev_pkts is None:
+            continue
+        d = _delta(cur_pkts, prev_pkts)
+        if d is None:
+            notes.append(f"installed-rule counter churned on {sw}")
+            continue
+        installed_delta += d
+    snap.installed_rule_packets = installed_delta
 
     # ---- controller load -------------------------------------------------
     d_total = _delta(current.controller.total(), previous.controller.total())

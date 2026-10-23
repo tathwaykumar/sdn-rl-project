@@ -33,6 +33,7 @@ import logging  # noqa: E402
 import os  # noqa: E402
 import signal  # noqa: E402
 import sys  # noqa: E402
+import time  # noqa: E402
 
 from os_ken import cfg  # noqa: E402
 from os_ken.base.app_manager import AppManager  # noqa: E402
@@ -118,11 +119,23 @@ def main(argv=None) -> int:
 
     _install_signal_handlers(app_mgr)
     LOG.info("controller running (%d service thread(s))", len(services))
+    started = time.time()
     try:
         hub.joinall(services)
     finally:
         app_mgr.close()
-    return 0
+
+    # Reaching here without a shutdown signal means the OpenFlow listener
+    # thread exited on its own -- almost always a failure to bind because
+    # another controller still holds the port. Exiting 0 would make that look
+    # like a clean run while the switches talked to the other process, so it
+    # is reported as the error it is.
+    elapsed = time.time() - started
+    LOG.error(
+        "OpenFlow listener exited after %.1fs without a shutdown signal; "
+        "the port was most likely already in use", elapsed
+    )
+    return 4
 
 
 if __name__ == "__main__":

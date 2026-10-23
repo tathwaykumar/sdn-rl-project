@@ -54,6 +54,17 @@ TABLE_MISS_PRIORITY = 0
 INFRA_PRIORITY = 1
 FLOW_PRIORITY = 10
 
+#: Cookie stamped on routed (policy-installed) flows only.
+#:
+#: This exists because an OpenFlow 1.3 ``OFPFC_DELETE`` with a wildcard match
+#: is *non-strict*: it ignores the priority field and deletes every matching
+#: entry. Flushing "priority=10" that way also removed the table-miss and
+#: infrastructure rules, after which no packet could reach the controller and
+#: the network never recovered from a link failure. Deleting by cookie targets
+#: exactly the rules the policy installed and leaves the plumbing intact.
+ROUTED_COOKIE = 0x5D4E0001
+COOKIE_MASK_EXACT = 0xFFFFFFFFFFFFFFFF
+
 #: Protocols we install 5-tuple rules for. Others get a 3-tuple rule.
 L4_TCP = 6
 L4_UDP = 17
@@ -229,6 +240,7 @@ class BaseSdnApp(app_manager.OSKenApp):
         idle_timeout: int,
         hard_timeout: int,
         send_flow_rem: bool = False,
+        cookie: int = 0,
     ) -> None:
         parser, ofp = dp.ofproto_parser, dp.ofproto
         inst = (
@@ -245,6 +257,7 @@ class BaseSdnApp(app_manager.OSKenApp):
             idle_timeout=idle_timeout,
             hard_timeout=hard_timeout,
             flags=flags,
+            cookie=cookie,
         )
         dp.send_msg(mod)
         self._bump("flow_mod")
@@ -303,6 +316,7 @@ class BaseSdnApp(app_manager.OSKenApp):
                 idle_timeout=idle_timeout,
                 hard_timeout=self.hard_timeout,
                 send_flow_rem=True,
+                cookie=ROUTED_COOKIE,
             )
             installed += 1
         return installed
@@ -504,11 +518,13 @@ class BaseSdnApp(app_manager.OSKenApp):
                 parser.OFPFlowMod(
                     datapath=dp,
                     command=ofp.OFPFC_DELETE,
-                    priority=FLOW_PRIORITY,
                     match=parser.OFPMatch(),
                     out_port=ofp.OFPP_ANY,
                     out_group=ofp.OFPG_ANY,
                     table_id=ofp.OFPTT_ALL,
+                    # Cookie-scoped so the table-miss and IPv6 rules survive.
+                    cookie=ROUTED_COOKIE,
+                    cookie_mask=COOKIE_MASK_EXACT,
                 )
             )
             self._bump("flow_mod")
@@ -628,7 +644,12 @@ class BaseSdnApp(app_manager.OSKenApp):
             max_link_utilisation=snap.max_link_util,
             loss_fraction=snap.loss_fraction,
             occupancy_fraction=snap.occupancy_fraction,
-            controller_msg_rate=snap.controller_msg_rate,
+            # Only *reactive* load counts against the policy: PacketIn plus
+            # FlowMod. Our own periodic stats polling is fixed overhead that
+            # the policy cannot influence, and at 15 requests/sec it would
+            # dominate the total and flatten this term into a constant --
+            # leaving variant C no gradient to learn timeout control from.
+            controller_msg_rate=snap.packet_in_rate + snap.flow_mod_rate,
             weights=self.weights,
             normalisers=self.normalisers,
         )

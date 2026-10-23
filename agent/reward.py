@@ -102,7 +102,11 @@ def compute_reward(
             and queueing delay, which OF stats cannot measure directly.
         loss_fraction: dropped packets / offered packets on core links.
         occupancy_fraction: mean flow-table occupancy against the soft cap.
-        controller_msg_rate: controller messages per second this interval.
+        controller_msg_rate: *reactive* controller messages per second
+            (PacketIn + FlowMod). Periodic stats polling is excluded: it is
+            fixed monitoring overhead the policy cannot change, and including
+            it would swamp the term and remove the incentive to manage
+            timeouts at all.
     """
     tp = clip01(delivered_bps / normalisers.throughput_ref_bps)
     util = clip01(max_link_utilisation)
