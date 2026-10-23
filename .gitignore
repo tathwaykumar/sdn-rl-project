@@ -55,3 +55,6 @@ results/launcher_daemon.log
 results/webdemo.log
 results/diagnostics_run.log
 results/matrix_run.log
+
+# Diagnostic sampling output (regenerate with experiments/diagnose_loss_run.py)
+results/diagnostics/

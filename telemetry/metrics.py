@@ -260,6 +260,26 @@ def derive(
     snap.offered_bps = sum(
         bps for key, bps in egress_bps.items() if key in CORE_EGRESS
     )
+
+    # KNOWN BLIND SPOT -- read before using this figure.
+    #
+    # ``tx_dropped`` counts packets Open vSwitch itself discarded. It does NOT
+    # count packets dropped by the Linux traffic-control queue underneath it,
+    # and in this emulation that is where congestion loss happens: Mininet's
+    # TCLink enforces every link's bandwidth with an HTB qdisc below OVS.
+    #
+    # Measured directly (experiments/diagnose_loss_run.py, heavy workload,
+    # variant A): the HTB queue on the 5 Mbit bottleneck s1-eth3 dropped 220
+    # packets and recorded 13,253 overlimits, while OpenFlow reported
+    # tx_dropped = 0 on every port. The two counters disagree because they
+    # are watching different places.
+    #
+    # Consequence: this value is near zero for the whole 60-run matrix and is
+    # NOT a usable measure of packet loss here. End-to-end loss is measured by
+    # the host's ping stream instead (see analysis/parsers.py). The field is
+    # kept, unchanged, because the reward function consumes it and altering it
+    # would silently change the agent's objective and invalidate the recorded
+    # experiments -- but it should be read as "OVS-level drops", not as loss.
     snap.loss_fraction = (dropped_pkts / offered_pkts) if offered_pkts else 0.0
 
     # Per-path utilisation = worst link on that path (the bottleneck is what

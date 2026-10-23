@@ -121,6 +121,80 @@ different policy, and the project does not establish that these are good weights
 
 ---
 
+## 5b. Packet loss: a measurement bug that was found and fixed
+
+The first version of this project reported **96.3% packet loss** on the heavy
+workload for variant A. That figure was wrong, and the way it was wrong is
+worth recording.
+
+**What happened.** The probe runs as `ping -D -O -i 0.2 -W 1`. The `-O` flag
+prints `no answer yet for icmp_seq=N` when a reply has not arrived **by the
+time the next probe is sent** — that is, after the 0.2 s probe interval, not
+after the 1 s timeout. Under queueing delay almost every probe trips that
+line and is then answered a few hundred milliseconds later. The parser counted
+every such line as a lost packet, so a slow-but-delivered probe was recorded
+as a loss.
+
+**How large the error was.** Measured across the primary matrix:
+
+| Workload / variant | Reported loss | Probes answered late | Never answered | True loss |
+|---|---|---|---|---|
+| heavy / A | 96.3% | 2137 of 2291 | 70 | **3.1%** |
+| heavy / B | 54.8% | 1466 | 42 | **1.5%** |
+| heavy / C | 35.4% | 939 | 35 | **1.3%** |
+
+The reported figure tracked median RTT against the 200 ms probe interval
+(319 ms → 96%, 206 ms → 55%, 174 ms → 35%) rather than measuring loss at all.
+
+**The fix.** Loss now counts only probes with no reply at any point. Probes
+answered late are reported separately as *delayed*, which is a genuine symptom
+of queueing and worth seeing — just not a loss figure. Regression tests pin
+both behaviours, including the exact failure mode (every probe slow, none
+lost, loss must read 0%).
+
+**What did not change.** No raw data was modified, no workload was altered, no
+traffic was reduced and no observation was excluded. Only the derived analysis
+was regenerated.
+
+---
+
+## 5c. OpenFlow counters cannot see congestion loss here
+
+The controller's `loss_fraction` metric divides OpenFlow `tx_dropped` by
+offered packets. In this emulation that number is near zero and **is not a
+measure of congestion loss**.
+
+Mininet's `TCLink` enforces every link's bandwidth with a Linux HTB queue
+underneath Open vSwitch. Packets dropped by that queue are never seen by
+`tx_dropped`, which counts only what OVS itself discarded.
+
+**Measured directly** (`experiments/diagnose_loss_run.py`, heavy workload,
+variant A, 60 s):
+
+| Counter | Value |
+|---|---|
+| HTB queue on the 5 Mbit bottleneck `s1-eth3` | **220 packets dropped**, 13,253 overlimits |
+| OpenFlow `tx_dropped`, summed over every port | **0** |
+
+The 13,253 "overlimits" are the important number: HTB was *delaying* traffic
+heavily rather than discarding it, which is exactly what produces the 300 ms
+RTT and the large delayed-probe count, with only a little loss.
+
+**Consequence for the reward.** The reward's loss term is fed from this
+counter, so it was effectively inert for the whole experiment: non-zero in
+**2 of 5,854 recorded intervals**, with a maximum value of 0.000861 (maximum
+possible contribution −0.0005 against a weight of 0.6). The agent was
+therefore never meaningfully penalised for loss.
+
+The term has deliberately **not** been changed. Altering it would change the
+agent's objective and invalidate every recorded run, and the point of this
+project is the comparison, not the reward's elegance. It is documented here
+and surfaced in the dashboard instead. Anyone rerunning the matrix should
+consider feeding the loss term from an end-to-end measurement, and should
+treat that as a different experiment rather than a correction to this one.
+
+---
+
 ## 6. Design decisions that constrain the results
 
 - **ARP is proxied by the controller**, not flooded. The topology contains a loop,

@@ -261,6 +261,13 @@ export interface LatencyPayload {
   window_s?: number;
   samples?: number;
   losses?: number;
+  /** Probes with no reply at any point — the only unambiguous loss. */
+  lost?: number;
+  /** Answered, but only after the next probe was due. Delivered, not lost. */
+  delayed?: number;
+  delayed_fraction?: number | null;
+  probes_sent?: number;
+  replies_received?: number;
   loss_fraction?: number | null;
   median_ms?: number | null;
   p95_ms?: number | null;

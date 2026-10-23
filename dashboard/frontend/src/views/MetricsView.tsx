@@ -131,17 +131,43 @@ export function MetricsView({
           source={latency?.available ? (latency.source ?? src) : "unavailable"}
         />
         <MetricCard
-          label="Packet loss (probe)"
+          label="Packet loss (end-to-end)"
           value={
             latency?.available && latency.loss_fraction !== null &&
             latency.loss_fraction !== undefined
               ? fmtNumber(latency.loss_fraction * 100, 2)
-              : "—"
+              : "N/A"
           }
           unit="%"
-          sub={latency?.available ? `${latency.losses} lost probes` : "not measured"}
-          tone={(latency?.loss_fraction ?? 0) > 0.02 ? "bad" : undefined}
+          sub={
+            latency?.available
+              ? `${latency.lost ?? 0} lost of ${latency.probes_sent ?? 0} probes`
+              : "no probe data"
+          }
+          tone={(latency?.loss_fraction ?? 0) > 0.05 ? "bad"
+            : (latency?.loss_fraction ?? 0) > 0.01 ? "warn" : undefined}
           source={latency?.available ? (latency.source ?? src) : "unavailable"}
+          direction="lower_is_better"
+          explain="Probes that never received a reply. Probes answered late count as delayed, not lost."
+        />
+        <MetricCard
+          label="Probes delayed"
+          value={
+            latency?.available && latency.delayed_fraction !== null &&
+            latency.delayed_fraction !== undefined
+              ? fmtNumber(latency.delayed_fraction * 100, 1)
+              : "N/A"
+          }
+          unit="%"
+          sub={
+            latency?.available
+              ? `${latency.delayed ?? 0} answered late (>200 ms)`
+              : "no probe data"
+          }
+          tone={(latency?.delayed_fraction ?? 0) > 0.5 ? "warn" : undefined}
+          source={latency?.available ? (latency.source ?? src) : "unavailable"}
+          direction="lower_is_better"
+          explain="Delivered, but only after the next probe was due. A symptom of queueing, not loss."
         />
         <MetricCard
           label="Max link utilisation"
@@ -220,6 +246,8 @@ export function MetricsView({
           ]}
         />
       </div>
+
+      <LossPanel latency={latency} runId={runId} snapshot={snapshot} />
 
       <Card title="What is not shown live" bodyClassName="p-4">
         <ul className="text-[11px] space-y-1.5 leading-relaxed" style={{ color: "var(--text-3)" }}>
@@ -309,5 +337,154 @@ function Chart({
         </div>
       )}
     </Card>
+  );
+}
+
+/** Packet-loss detail: counts, context, and an honest threshold.
+ *
+ * Loss is shown with the packet counts behind it, separated from delay, and
+ * tied to the run it came from. The warning deliberately has no universal
+ * threshold: the heavy workload offers more traffic than the bottleneck path
+ * can carry, so loss there is the experiment working as designed, while the
+ * same figure on the light workload would indicate a fault.
+ */
+function LossPanel({
+  latency,
+  runId,
+  snapshot,
+}: {
+  latency?: LatencyPayload;
+  runId?: string;
+  snapshot: LiveSnapshot | null;
+}) {
+  const workload = runId
+    ? undefined
+    : snapshot?.live?.workload ?? undefined;
+  const sourceRun = runId ?? snapshot?.live?.run_id ?? undefined;
+
+  if (!latency?.available) {
+    return (
+      <Card title="Packet loss detail" right={<SourceBadge source="unavailable" />}>
+        <Empty
+          title="No probe data"
+          detail={
+            latency?.reason ??
+            "Loss is measured by a ping stream that runs during an experiment. Start a run, or open a completed one."
+          }
+        />
+      </Card>
+    );
+  }
+
+  const loss = latency.loss_fraction ?? 0;
+  const delayed = latency.delayed_fraction ?? 0;
+  const sent = latency.probes_sent ?? 0;
+  const received = latency.replies_received ?? 0;
+  const lost = latency.lost ?? 0;
+
+  // Congestion is expected on heavy; it is not on light.
+  const congestionExpected = workload === "heavy" || workload === "failure";
+  const high = loss > (congestionExpected ? 0.05 : 0.01);
+
+  return (
+    <Card
+      title="Packet loss detail"
+      subtitle={
+        workload
+          ? `Workload: ${workload} · measurement window ${fmtNumber(latency.window_s, 0)} s`
+          : `Measurement window ${fmtNumber(latency.window_s, 0)} s`
+      }
+      right={<SourceBadge source={latency.source} age={latency.age_s} />}
+    >
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+        <Counter label="Probes sent" value={sent} />
+        <Counter label="Replies received" value={received} tone="ok" />
+        <Counter label="Never answered" value={lost} tone={lost > 0 ? "bad" : undefined} />
+        <Counter label="Answered late" value={latency.delayed ?? 0} tone="warn" />
+      </div>
+
+      <div className="space-y-2">
+        <Bar label="Lost" fraction={loss} color="var(--bad)" />
+        <Bar label="Delayed but delivered" fraction={delayed} color="var(--warn)" />
+      </div>
+
+      {high && (
+        <div
+          className="mt-3 rounded-lg border px-3 py-2 text-[11.5px] leading-relaxed"
+          style={{
+            borderColor: "rgba(248,113,113,0.35)",
+            background: "var(--bad-dim)",
+            color: "#fca5a5",
+          }}
+        >
+          <strong>Loss is high for this workload.</strong>{" "}
+          {congestionExpected
+            ? "The heavy and failure workloads deliberately offer more traffic than the bottleneck path can carry, so some loss is expected — but this is above what congestion alone usually produces here."
+            : "This workload offers well under the path capacity, so loss indicates a fault rather than congestion."}
+        </div>
+      )}
+
+      <p className="text-[11px] mt-3 leading-relaxed" style={{ color: "var(--text-3)" }}>
+        Lower loss is generally better, but there is no single threshold that
+        applies to every workload: <span className="mono">heavy</span> is
+        designed to saturate the 5 Mbit path, so a small amount of loss there
+        is the experiment working. The same figure on{" "}
+        <span className="mono">light</span> would mean something is wrong.
+      </p>
+      <p className="text-[11px] mt-1.5 leading-relaxed" style={{ color: "var(--text-4)" }}>
+        {latency.source_note}
+        {sourceRun && (
+          <>
+            {" "}Source run: <span className="mono">{sourceRun}</span>
+          </>
+        )}
+      </p>
+    </Card>
+  );
+}
+
+function Counter({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone?: "ok" | "warn" | "bad";
+}) {
+  return (
+    <div className="rounded-lg px-2.5 py-1.5" style={{ background: "var(--surface-2)" }}>
+      <p className="text-[10px]" style={{ color: "var(--text-4)" }}>{label}</p>
+      <p className="text-[16px] font-semibold num"
+         style={{ color: tone ? `var(--${tone})` : "var(--text-1)" }}>
+        {value.toLocaleString()}
+      </p>
+    </div>
+  );
+}
+
+function Bar({
+  label,
+  fraction,
+  color,
+}: {
+  label: string;
+  fraction: number;
+  color: string;
+}) {
+  const pct = Math.min(100, Math.max(0, fraction * 100));
+  return (
+    <div>
+      <div className="flex justify-between text-[11px] mb-0.5">
+        <span style={{ color: "var(--text-2)" }}>{label}</span>
+        <span className="num" style={{ color: "var(--text-2)" }}>
+          {fmtNumber(pct, 2)}%
+        </span>
+      </div>
+      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "var(--surface-3)" }}>
+        <div className="h-full rounded-full transition-all"
+             style={{ width: `${pct}%`, background: color }} />
+      </div>
+    </div>
   );
 }

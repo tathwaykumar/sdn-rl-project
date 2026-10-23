@@ -105,6 +105,129 @@ def test_parse_ping_empty_is_not_zero_loss(tmp_path):
     assert p.loss_fraction is None
 
 
+# ------------------------------------------- loss vs delay (regression)
+#
+# ping -O prints "no answer yet for icmp_seq=N" when a reply has not arrived
+# by the time the NEXT probe is sent -- after the 0.2s probe interval, not
+# after the 1s timeout. Counting those lines as losses conflated slow
+# delivery with loss. On the heavy workload that reported 96.3% loss where
+# 3.1% of probes were genuinely lost. These tests pin the corrected
+# behaviour.
+
+DELAYED_THEN_ANSWERED = (
+    "PING 10.0.0.3 (10.0.0.3) 56(84) bytes of data.\n"
+    "[1000.000000] no answer yet for icmp_seq=1\n"
+    "[1000.200000] no answer yet for icmp_seq=2\n"
+    "[1000.250000] 64 bytes from 10.0.0.3: icmp_seq=1 ttl=64 time=250 ms\n"
+    "[1000.460000] 64 bytes from 10.0.0.3: icmp_seq=2 ttl=64 time=260 ms\n"
+    "[1000.600000] no answer yet for icmp_seq=3\n"
+)
+
+
+def test_delayed_probes_are_not_counted_as_lost(tmp_path):
+    """A probe answered after the next was due was delivered, not lost."""
+    path = _write(tmp_path, "ping_delay.txt", DELAYED_THEN_ANSWERED)
+    p = parse_ping(path)
+    assert p.ok
+    assert p.sent == 3            # seqs 1, 2, 3
+    assert p.delayed == 2         # 1 and 2 were slow but answered
+    assert p.lost == 1            # only 3 never answered
+    assert p.loss_fraction == pytest.approx(1 / 3)
+    assert p.delayed_fraction == pytest.approx(2 / 3)
+
+
+def test_loss_is_zero_when_every_slow_probe_eventually_replies(tmp_path):
+    """The exact failure mode: heavy queueing, no actual loss."""
+    lines = ["PING 10.0.0.3 (10.0.0.3) 56(84) bytes of data."]
+    for seq in range(1, 21):
+        lines.append(f"[{1000 + seq * 0.2:.6f}] no answer yet for icmp_seq={seq}")
+    for seq in range(1, 21):
+        lines.append(
+            f"[{1000 + seq * 0.2 + 0.3:.6f}] 64 bytes from 10.0.0.3: "
+            f"icmp_seq={seq} ttl=64 time=300 ms"
+        )
+    path = _write(tmp_path, "ping_slow.txt", "\n".join(lines) + "\n")
+    p = parse_ping(path)
+    assert p.sent == 20
+    assert p.delayed == 20
+    assert p.lost == 0
+    assert p.loss_fraction == 0.0, (
+        "every probe was answered; reporting loss here was the original bug"
+    )
+    assert p.delayed_fraction == 1.0
+
+
+def test_genuinely_lost_probes_are_still_counted(tmp_path):
+    """The fix must not hide real loss."""
+    text = (
+        "PING 10.0.0.3 (10.0.0.3) 56(84) bytes of data.\n"
+        "[1000.000000] 64 bytes from 10.0.0.3: icmp_seq=1 ttl=64 time=5 ms\n"
+        "[1000.200000] no answer yet for icmp_seq=2\n"
+        "[1000.400000] no answer yet for icmp_seq=3\n"
+        "[1000.600000] 64 bytes from 10.0.0.3: icmp_seq=4 ttl=64 time=5 ms\n"
+    )
+    path = _write(tmp_path, "ping_lost.txt", text)
+    p = parse_ping(path)
+    assert p.sent == 4
+    assert p.lost == 2
+    assert p.delayed == 0
+    assert p.loss_fraction == pytest.approx(0.5)
+
+
+def test_clean_stream_reports_no_loss_and_no_delay(tmp_path):
+    text = (
+        "PING 10.0.0.3 (10.0.0.3) 56(84) bytes of data.\n"
+        "[1000.000000] 64 bytes from 10.0.0.3: icmp_seq=1 ttl=64 time=4 ms\n"
+        "[1000.200000] 64 bytes from 10.0.0.3: icmp_seq=2 ttl=64 time=4 ms\n"
+    )
+    path = _write(tmp_path, "ping_clean.txt", text)
+    p = parse_ping(path)
+    assert p.loss_fraction == 0.0
+    assert p.delayed_fraction == 0.0
+    assert p.sent == 2
+
+
+# --------------------------------------------- primary-matrix separation
+def test_primary_runs_are_untagged():
+    from analysis.parsers import is_primary_run, run_tag
+    assert is_primary_run("20261023-080906-B-heavy-seed1")
+    assert run_tag("20261023-080906-B-heavy-seed1") is None
+
+    for tagged in ("20261023-141638-B-heavy-seed1-ui",
+                   "20261023-124248-C-failure-seed7-webdemo",
+                   "20261023-100228-C-heavy-seed1-diag-frozen"):
+        assert not is_primary_run(tagged), tagged
+        assert run_tag(tagged)
+
+
+def test_adhoc_runs_do_not_join_the_matrix(tmp_path):
+    """An ad-hoc run reusing a matrix seed would double-count that cell.
+
+    One browser-launched run reused seed 1 for B/heavy, which inflated that
+    cell from 5 runs to 6 and made a repeat of one configuration look like an
+    extra independent sample.
+    """
+    import json as _json
+    from analysis.parsers import discover_runs
+
+    for name in ("20261023-080906-B-heavy-seed1",
+                 "20261023-141638-B-heavy-seed1-ui"):
+        d = tmp_path / name
+        (d / "raw").mkdir(parents=True)
+        (d / "config.json").write_text(
+            _json.dumps({"variant": "B", "workload": "heavy", "seed": 1,
+                         "duration_s": 90})
+        )
+        (d / "manifest.json").write_text(_json.dumps({"complete": True}))
+
+    primary = discover_runs(str(tmp_path))
+    assert len(primary) == 1
+    assert os.path.basename(primary[0].path).endswith("seed1")
+
+    everything = discover_runs(str(tmp_path), primary_only=False)
+    assert len(everything) == 2
+
+
 def test_recovery_window_measures_from_the_failure(tmp_path):
     path = _write(tmp_path, "ping_h1.txt", PING_TEXT)
     p = parse_ping(path)

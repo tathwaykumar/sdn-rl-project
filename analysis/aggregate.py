@@ -58,6 +58,7 @@ METRICS: Tuple[Tuple[str, str, float, int, Optional[bool]], ...] = (
     ("rtt_median_ms",        "Latency, median RTT",        1.0, 2, False),
     ("rtt_p95_ms",           "Latency, p95 RTT",           1.0, 2, False),
     ("ping_loss_fraction",   "Packet loss (ping)",         0.01, 2, False),
+    ("ping_delayed_fraction", "Probes delayed past 200 ms", 0.01, 1, False),
     ("of_loss_fraction",     "Packet loss (OF counters)",  0.01, 3, False),
     ("max_link_util",        "Max link utilisation",       0.01, 1, None),
     ("mean_rules",           "Flow-table occupancy (rules)", 1.0, 1, False),
@@ -172,11 +173,22 @@ def host_metrics(run: Run, window: str) -> Dict[str, Optional[float]]:
         out["rtt_p95_ms"] = stats.percentile(rtts, 0.95)
         out["ping_replies"] = float(len(rtts))
         out["ping_loss_fraction"] = ping.loss_fraction
+        # Recorded alongside loss, never folded into it: a probe answered
+        # after the next one was due was delivered, not lost. It is a real
+        # symptom of queueing and is reported as its own quantity.
+        out["ping_delayed_fraction"] = ping.delayed_fraction
+        out["ping_sent"] = float(ping.sent)
+        out["ping_lost"] = float(ping.lost)
+        out["ping_delayed"] = float(ping.delayed)
     else:
         out["rtt_median_ms"] = None
         out["rtt_p95_ms"] = None
         out["ping_replies"] = 0.0
         out["ping_loss_fraction"] = None
+        out["ping_delayed_fraction"] = None
+        out["ping_sent"] = None
+        out["ping_lost"] = None
+        out["ping_delayed"] = None
 
     return out
 

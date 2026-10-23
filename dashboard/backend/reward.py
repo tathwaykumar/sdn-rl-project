@@ -83,11 +83,21 @@ TERMS: tuple = (
         "csv_column": "r_loss",
         "weight_key": "loss",
         "sign": -1,
-        "label": "Packet loss",
-        "measured": "Dropped packets divided by offered packets on the core links.",
+        "label": "Packet loss (OVS counters)",
+        "measured": "OpenFlow tx_dropped over offered packets on the core links.",
         "normalisation": "Already a fraction; clamped to 0-1.",
-        "plain": "Traffic the network threw away. Penalised more heavily than "
-                 "congestion.",
+        "plain": "Intended to penalise discarded traffic. In practice this "
+                 "term was inert: it was non-zero in 2 of 5,854 recorded "
+                 "intervals across the whole matrix, with a maximum value of "
+                 "0.000861.",
+        "caveat": "Congestion loss in this emulation happens in the Linux "
+                  "traffic-control queue that Mininet installs beneath Open "
+                  "vSwitch, and OpenFlow's tx_dropped does not count it. "
+                  "Measured directly: the bottleneck queue dropped 220 packets "
+                  "while OpenFlow reported 0. End-to-end loss is measured by "
+                  "the host ping stream instead. The term is left unchanged "
+                  "because altering it would change the agent's objective and "
+                  "invalidate the recorded experiments.",
         "direction": "lower_is_better",
     },
     {
@@ -389,13 +399,42 @@ METRIC_CATALOG: tuple = (
         "measured": "Same probe stream as the median.",
     },
     {
-        "key": "packet_loss", "label": "Packet loss", "unit": "%",
+        "key": "packet_loss", "label": "Packet loss (end-to-end)", "unit": "%",
         "direction": "lower_is_better", "kind": "interval_rate",
-        "plain": "Share of probes that never came back.",
-        "measured": "ping, counting explicit no-answer records.",
+        "plain": "Share of probes that never received a reply at all.",
+        "measured": "ping h1 -> h3, counting only probes with no reply at any "
+                    "point. Probes answered late are counted as delayed, not "
+                    "lost.",
         "caveat": "Read latency together with loss. A variant that drops more "
                   "traffic can show a lower median simply because the slow "
-                  "packets were never delivered.",
+                  "packets were never delivered. Note also that 'high' depends "
+                  "on the workload: the heavy workload deliberately offers more "
+                  "traffic than the bottleneck path can carry, so some loss "
+                  "there is the experiment working as designed.",
+    },
+    {
+        "key": "probe_delayed", "label": "Probes delayed", "unit": "%",
+        "direction": "lower_is_better", "kind": "interval_rate",
+        "plain": "Share of probes answered only after the next probe was due "
+                 "(later than 200 ms). These were delivered, just slowly.",
+        "measured": "ping -O reports a probe as outstanding when its reply has "
+                    "not arrived by the next send. Counting those as losses was "
+                    "a measurement bug: it reported 96.3% loss on the heavy "
+                    "workload where 3.3% of probes were actually lost.",
+        "caveat": "This is a symptom of queueing, not of loss. It is reported "
+                  "separately so the two are never conflated again.",
+    },
+    {
+        "key": "ovs_drops", "label": "OVS-level drops", "unit": "%",
+        "direction": "lower_is_better", "kind": "interval_rate",
+        "plain": "Packets discarded by Open vSwitch itself.",
+        "measured": "OpenFlow tx_dropped on core ports.",
+        "caveat": "Near zero throughout this project, and NOT a measure of "
+                  "congestion loss: Mininet enforces link bandwidth with a "
+                  "traffic-control queue beneath Open vSwitch, and drops there "
+                  "are invisible to this counter. Verified directly -- the "
+                  "bottleneck queue dropped 220 packets while this counter "
+                  "read 0. Use end-to-end packet loss instead.",
     },
     {
         "key": "max_link_util", "label": "Max link utilisation", "unit": "%",

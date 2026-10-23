@@ -187,27 +187,39 @@ def read_latency(raw_dir: str, window_s: float = 30.0,
     except OSError as exc:
         return {"available": False, "reason": f"cannot read probe output: {exc}"}
 
-    replies: List[Tuple[float, float]] = []
-    losses: List[float] = []
+    # Track per-sequence so a probe reported outstanding and answered later is
+    # recognised as delivered. ``ping -O`` prints "no answer yet" once a reply
+    # has not arrived by the time the next probe is sent -- after the 0.2s
+    # probe interval, not after the 1s timeout. Counting those lines as losses
+    # conflated slow delivery with loss and reported 96.3% loss on a workload
+    # that actually lost 3.3% of probes.
+    replies: Dict[int, Tuple[float, float]] = {}
+    outstanding: Dict[int, float] = {}
     for line in lines:
         m = _PING_REPLY.match(line)
         if m:
-            replies.append((float(m.group(1)), float(m.group(3))))
+            replies[int(m.group(2))] = (float(m.group(1)), float(m.group(3)))
             continue
         m = _PING_LOSS.match(line)
         if m:
-            losses.append(float(m.group(1)))
+            outstanding[int(m.group(2))] = float(m.group(1))
 
-    if not replies and not losses:
+    if not replies and not outstanding:
         return {"available": False, "reason": "probe has produced no results yet"}
 
-    newest = max([t for t, _ in replies] + losses)
+    stamps = [t for t, _ in replies.values()] + list(outstanding.values())
+    newest = max(stamps)
     cutoff = newest - window_s
-    recent = [(t, rtt) for t, rtt in replies if t >= cutoff]
-    recent_losses = [t for t in losses if t >= cutoff]
 
-    rtts = sorted(rtt for _, rtt in recent)
-    total = len(recent) + len(recent_losses)
+    recent_replies = {s: v for s, v in replies.items() if v[0] >= cutoff}
+    recent_outstanding = {s: t for s, t in outstanding.items() if t >= cutoff}
+
+    lost_seqs = set(recent_outstanding) - set(recent_replies)
+    delayed_seqs = set(recent_outstanding) & set(recent_replies)
+    accounted = set(recent_replies) | set(recent_outstanding)
+
+    rtts = sorted(rtt for _, rtt in recent_replies.values())
+    total = len(accounted)
 
     def pct(q: float) -> Optional[float]:
         if not rtts:
@@ -215,19 +227,32 @@ def read_latency(raw_dir: str, window_s: float = 30.0,
         idx = min(len(rtts) - 1, max(0, int(round(q * (len(rtts) - 1)))))
         return rtts[idx]
 
+    series = sorted(
+        ((t, rtt) for t, rtt in recent_replies.values()), key=lambda x: x[0]
+    )
+
     return {
         "available": True,
         "window_s": window_s,
-        "samples": len(recent),
-        "losses": len(recent_losses),
-        "loss_fraction": (len(recent_losses) / total) if total else None,
+        "probes_sent": total,
+        "replies_received": len(recent_replies),
+        "samples": len(recent_replies),
+        "lost": len(lost_seqs),
+        "losses": len(lost_seqs),
+        "delayed": len(delayed_seqs),
+        "loss_fraction": (len(lost_seqs) / total) if total else None,
+        "delayed_fraction": (len(delayed_seqs) / total) if total else None,
         "median_ms": pct(0.5),
         "p95_ms": pct(0.95),
         "min_ms": rtts[0] if rtts else None,
         "max_ms": rtts[-1] if rtts else None,
-        "series": [{"t": t, "rtt_ms": rtt} for t, rtt in recent[-120:]],
+        "series": [{"t": t, "rtt_ms": rtt} for t, rtt in series[-120:]],
         "age_s": file_age_s(path),
-        "source_note": "end-to-end ICMP h1 -> h3, measured by the host",
+        "source_note": (
+            "End-to-end ICMP h1 -> h3, measured by the host. 'Lost' counts "
+            "probes with no reply at any point; probes answered after the next "
+            "was due are counted as delayed, not lost."
+        ),
     }
 
 

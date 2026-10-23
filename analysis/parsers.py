@@ -108,11 +108,57 @@ class PingResult:
         return len(seqs)
 
     @property
+    def _replied_seqs(self) -> set:
+        return {s for _, s, _ in self.replies}
+
+    @property
+    def _outstanding_seqs(self) -> set:
+        return {s for _, s in self.losses}
+
+    @property
+    def delayed(self) -> int:
+        """Probes reported outstanding that nevertheless received a reply.
+
+        ``ping -O`` prints "no answer yet for icmp_seq=N" when a reply has not
+        arrived **by the time the next probe is sent** -- after the 0.2s probe
+        interval, not after the 1s timeout. Under queueing delay, most probes
+        trip that line and are answered a moment later. They were delivered.
+        """
+        return len(self._outstanding_seqs & self._replied_seqs)
+
+    @property
+    def lost(self) -> int:
+        """Probes that never received a reply. The only unambiguous loss."""
+        return len(self._outstanding_seqs - self._replied_seqs)
+
+    @property
     def loss_fraction(self) -> Optional[float]:
+        """Fraction of probes that were never answered.
+
+        This counts only probes with no reply at any point. Counting every
+        "no answer yet" line instead -- which this did originally -- conflated
+        slow delivery with loss, and the error was enormous: on the heavy
+        workload it reported 96.3% loss where 3.1% of probes were actually
+        lost, because 2137 of 2291 probes were answered after the line was
+        printed. The reported figure tracked RTT against the probe interval
+        rather than measuring loss at all.
+        """
         total = self.sent
         if total == 0:
             return None
-        return len(self.losses) / total
+        return self.lost / total
+
+    @property
+    def delayed_fraction(self) -> Optional[float]:
+        """Fraction answered only after the next probe was due.
+
+        Worth reporting in its own right: it is a real symptom of queueing,
+        just not a loss figure.
+        """
+        total = self.sent
+        if total == 0:
+            return None
+        return self.delayed / total
 
 
 def parse_ping(path: str) -> PingResult:
@@ -371,6 +417,33 @@ def load_run(path: str) -> Optional[Run]:
 #: (``--tag diag-frozen`` and friends).
 DIAGNOSTIC_TAG = "-diag-"
 
+#: A primary-matrix run directory: timestamp, variant, workload, seed, and
+#: nothing else. The runner appends ``-<tag>`` whenever ``--tag`` is given, so
+#: an untagged name is exactly the controlled sweep.
+PRIMARY_RUN_RE = re.compile(
+    r"^\d{8}-\d{6}-[A-C]-[a-z]+-seed\d+$"
+)
+
+
+def run_tag(run_id: str) -> Optional[str]:
+    """The ``--tag`` suffix on a run directory, or None for a matrix run."""
+    if PRIMARY_RUN_RE.match(run_id):
+        return None
+    match = re.match(r"^\d{8}-\d{6}-[A-C]-[a-z]+-seed\d+-(.+)$", run_id)
+    return match.group(1) if match else None
+
+
+def is_primary_run(run_id: str) -> bool:
+    """Is this part of the controlled 60-run matrix?
+
+    Ad-hoc runs started from the dashboard carry a tag and are *not* extra
+    samples of the matrix: one was launched with a seed the matrix already
+    used, which would have double-counted that configuration, inflated n and
+    understated the spread. They remain fully visible in History and can be
+    analysed on their own; they simply do not join the controlled sweep.
+    """
+    return bool(PRIMARY_RUN_RE.match(run_id))
+
 
 def is_diagnostic_run(run_id: str) -> bool:
     """Is this a control-experiment run rather than a normal measurement?
@@ -386,15 +459,18 @@ def is_diagnostic_run(run_id: str) -> bool:
     return DIAGNOSTIC_TAG in run_id
 
 
-def discover_runs(runs_root: str, include_diagnostics: bool = False) -> List[Run]:
-    """Load every run directory, including incomplete ones.
+def discover_runs(runs_root: str, include_diagnostics: bool = False,
+                  primary_only: bool = True) -> List[Run]:
+    """Load run directories, including incomplete ones.
 
     Incomplete runs are returned too, so the analysis can *report* how many
     were excluded instead of quietly analysing whatever happened to work.
 
-    Control-experiment runs are excluded by default; pass
-    ``include_diagnostics=True`` to get them (``analysis/diagnostics.py``
-    does, because they are exactly what it analyses).
+    By default only the primary matrix is returned. Control-experiment runs
+    and ad-hoc tagged runs are both excluded, for the same reason: they are
+    valid runs but they are not samples of the controlled sweep, and mixing
+    them in corrupts it. ``analysis/diagnostics.py`` asks for the control runs
+    explicitly, because they are exactly what it analyses.
     """
     out: List[Run] = []
     for entry in sorted(os.listdir(runs_root)):
@@ -402,6 +478,8 @@ def discover_runs(runs_root: str, include_diagnostics: bool = False) -> List[Run
         if not os.path.isdir(full):
             continue
         if not include_diagnostics and is_diagnostic_run(entry):
+            continue
+        if primary_only and not include_diagnostics and not is_primary_run(entry):
             continue
         run = load_run(full)
         if run is not None:
