@@ -1,0 +1,185 @@
+/** App-level rendering: the shell mounts, and each global state is visible.
+ *
+ * These assert the states a user actually lands in -- no experiment running,
+ * an experiment running, and mock mode -- because each one has to be
+ * distinguishable at a glance. In particular, mock mode must be impossible to
+ * miss.
+ */
+import { act, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import App from "../App";
+import { api } from "../api/client";
+
+/** A fake socket that records its instances so a test can push a frame. */
+class SilentSocket {
+  static instances: SilentSocket[] = [];
+  onopen: (() => void) | null = null;
+  onclose: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  onmessage: ((event: { data: string }) => void) | null = null;
+  constructor(readonly url: string) {
+    SilentSocket.instances.push(this);
+  }
+  open() {
+    this.onopen?.();
+  }
+  emit(payload: unknown) {
+    this.onmessage?.({ data: JSON.stringify(payload) });
+  }
+  close() {}
+  send() {}
+}
+
+const IDLE_SNAPSHOT = {
+  type: "snapshot" as const,
+  t: 1_792_747_000,
+  mock_mode: false,
+  source: "unavailable" as const,
+  live: {
+    active: false, run_id: null, variant: null, workload: null, seed: null,
+    started_at: null, elapsed_s: null, duration_s: null, matrix_running: false,
+    processes: [], detail: "No run directory is awaiting a manifest.",
+  },
+  metrics: { available: false, reason: "no experiment is running" },
+  decisions: [],
+  events: [],
+};
+
+const ACTIVE_SNAPSHOT = {
+  ...IDLE_SNAPSHOT,
+  source: "live" as const,
+  live: {
+    ...IDLE_SNAPSHOT.live,
+    active: true, run_id: "20261023-090000-C-heavy-seed1",
+    variant: "C", workload: "heavy", seed: 1,
+    elapsed_s: 30, duration_s: 90, matrix_running: true,
+    detail: "Run in progress as part of a matrix sweep.",
+  },
+  metrics: {
+    available: true, source: "live" as const, t: 1_792_747_000,
+    interval_s: 1, age_s: 0.4,
+    values: {
+      delivered_bps: 9_900_000, max_link_util: 0.91, total_rules: 88,
+      util_A: 0.0, util_B: 0.91,
+    },
+    metric_meta: {},
+  },
+  latency: {
+    available: true, source: "live" as const, median_ms: 12.4, p95_ms: 31.2,
+    samples: 140, losses: 2, loss_fraction: 0.014, window_s: 30, series: [],
+  },
+  decisions: [
+    {
+      t: 1_792_747_000, step: 29, variant: "C", state: "0-3-1-0",
+      action: "path=B,idle=15", path: "B", idle_timeout: 15, reward: 0.42,
+      epsilon: 0.1, q_before: 0.3, q_after: 0.35, td_error: 0.05,
+      exploratory: false, greedy_action: "path=B,idle=15",
+      usable_paths: ["A", "B"], reward_terms: {},
+    },
+  ],
+  verification: {
+    available: true, status: "confirmed" as const,
+    detail: "18 rule(s) on path B are installed at the edge switches.",
+  },
+  events: [{ t: 1_792_746_990, kind: "switch_connected", detail: "s1" }],
+};
+
+const CAPS = {
+  mode: "live", mock_mode: false, is_root: false, can_read_runs: true,
+  can_start_experiments: false, can_query_switches_directly: false,
+  reason_cannot_start: "The API is running unprivileged.",
+  reason_cannot_query: "ovs-ofctl requires root.",
+  notes: ["Live telemetry is read from the active run's files."],
+  project_root: "/project", runs_dir: "/project/results/runs",
+};
+
+describe("App", () => {
+  beforeEach(() => {
+    SilentSocket.instances = [];
+    vi.stubGlobal("WebSocket", SilentSocket as unknown as typeof WebSocket);
+    vi.spyOn(api, "capabilities").mockResolvedValue(CAPS as never);
+    vi.spyOn(api, "snapshot").mockResolvedValue(IDLE_SNAPSHOT as never);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("renders the shell and all navigation sections", async () => {
+    render(<App />);
+    expect(screen.getByText("SDN + RL Research Dashboard")).toBeInTheDocument();
+    for (const label of [
+      "Overview", "Live Topology", "Flow Tables", "RL Decisions",
+      "Live Metrics", "Experiments", "A/B/C Comparison", "History",
+    ]) {
+      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
+    }
+  });
+
+  it("states plainly when no experiment is running", async () => {
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByText("No experiment running")).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/No live telemetry/)).toBeInTheDocument();
+  });
+
+  it("shows the running experiment and its live measurements", async () => {
+    render(<App />);
+    const socket = SilentSocket.instances.at(-1)!;
+
+    await act(async () => {
+      socket.open();
+      socket.emit(ACTIVE_SNAPSHOT);
+    });
+
+    // The run identity appears in the header pill.
+    expect(screen.getAllByText(/heavy · seed 1/).length).toBeGreaterThan(0);
+    // Live measurements reach the metric cards (9.9 Mbit/s, 88 rules).
+    expect(screen.getByText("9.90")).toBeInTheDocument();
+    expect(screen.getByText("88")).toBeInTheDocument();
+    // Latency comes from the host probe, not the controller.
+    expect(screen.getByText("12.4")).toBeInTheDocument();
+    // And the decision's installation status is surfaced, not assumed.
+    expect(screen.getByText(/Confirmed on switches/)).toBeInTheDocument();
+  });
+
+  it("marks a decision as awaiting confirmation until switches agree", async () => {
+    render(<App />);
+    const socket = SilentSocket.instances.at(-1)!;
+    await act(async () => {
+      socket.open();
+      socket.emit({
+        ...ACTIVE_SNAPSHOT,
+        verification: {
+          available: true,
+          status: "awaiting_confirmation",
+          detail: "The newest flow dump predates this decision.",
+        },
+      });
+    });
+    expect(screen.getByText(/Awaiting switch confirmation/)).toBeInTheDocument();
+  });
+
+  it("makes mock mode impossible to miss", async () => {
+    vi.spyOn(api, "capabilities").mockResolvedValue(
+      { ...CAPS, mock_mode: true } as never,
+    );
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByText(/MOCK MODE/)).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByText(/synthetic demo data, not a\s+measurement/),
+    ).toBeInTheDocument();
+  });
+
+  it("reports connection state in the header", async () => {
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getAllByText(/Connecting|Live stream|Polling/).length)
+        .toBeGreaterThan(0),
+    );
+  });
+});
