@@ -253,10 +253,33 @@ def test_idle_timeout_not_passed_for_variant_c():
     assert "--idle-timeout" in argv_b
 
 
+def _force_direct_path(monkeypatch, is_root: bool = True):
+    """Make the manager use its own subprocess path, not the launcher.
+
+    Both paths exist and both are tested; this pins which one a test means.
+    """
+    from dashboard.backend import config as config_mod
+    from dashboard.backend import experiments as exp_module
+
+    caps = config_mod.Capabilities(
+        mode="live",
+        can_read_runs=True,
+        can_start_experiments=is_root,
+        is_root=is_root,
+        start_mechanism="root_api" if is_root else "none",
+        launcher_available=False,
+        launcher_detail="launcher disabled for this test",
+        reason_cannot_start=None if is_root else "unprivileged and no launcher",
+    )
+    monkeypatch.setattr(exp_module, "probe_capabilities", lambda: caps)
+    return caps
+
+
 def test_start_refuses_while_another_experiment_runs(monkeypatch):
     from dashboard.backend import experiments as exp_module
     from dashboard.backend.runs import LiveStatus
 
+    _force_direct_path(monkeypatch)
     busy = LiveStatus(active=True, run_id="r1", detail="Run r1 is in progress.")
     monkeypatch.setattr(exp_module, "live_status", lambda: busy)
     monkeypatch.setattr(exp_module, "scan_experiment_processes", lambda: [])
@@ -268,13 +291,188 @@ def test_start_refuses_while_another_experiment_runs(monkeypatch):
     assert "already running" in excinfo.value.message
 
 
-def test_stop_refuses_when_nothing_was_launched_here():
+def test_stop_refuses_when_nothing_was_launched_here(monkeypatch):
     """A matrix started in a terminal must not be killable from the browser."""
+    _force_direct_path(monkeypatch)
     manager = ExperimentManager()
     with pytest.raises(ExperimentError) as excinfo:
         manager.stop()
     assert excinfo.value.status == 409
     assert "not stoppable" in excinfo.value.message
+
+
+def test_unprivileged_without_launcher_refuses_and_explains(monkeypatch):
+    """The original problem: no root, no launcher -> a clear 503, not a crash."""
+    from dashboard.backend import experiments as exp_module
+
+    _force_direct_path(monkeypatch, is_root=False)
+    monkeypatch.setattr(exp_module, "live_status",
+                        lambda: __import__("dashboard.backend.runs",
+                                           fromlist=["LiveStatus"]).LiveStatus())
+    monkeypatch.setattr(exp_module, "scan_experiment_processes", lambda: [])
+
+    manager = ExperimentManager()
+    with pytest.raises(ExperimentError) as excinfo:
+        manager.start("A", "light", 1, 30)
+    assert excinfo.value.status == 503
+    # It must tell the user how to fix it, including the command to run.
+    assert "run_experiment" in excinfo.value.message
+
+
+# ------------------------------------------------- launcher-delegated path
+class _FakeLauncher:
+    """Stands in for the privileged daemon."""
+
+    def __init__(self, current=None, raise_on_start=None):
+        self.current = current
+        self.raise_on_start = raise_on_start
+        self.started = []
+        self.stopped = []
+        self.injected = []
+
+    def status(self):
+        return {"current": self.current, "history": []}
+
+    def start(self, **kwargs):
+        if self.raise_on_start:
+            raise self.raise_on_start
+        self.started.append(kwargs)
+        self.current = {
+            "experiment_id": "exp-20261023-125758-c3da5252",
+            "running": True, "pid": 4242, "params": kwargs,
+        }
+        return {"experiment": self.current}
+
+    def stop(self, experiment_id):
+        self.stopped.append(experiment_id)
+        payload = dict(self.current or {})
+        self.current = None
+        payload["running"] = False
+        return {"experiment": payload}
+
+    def inject_link(self, experiment_id, action, link):
+        self.injected.append((experiment_id, action, link))
+        return {"command": {"action": action, "link": link}}
+
+
+def _force_launcher_path(monkeypatch, fake):
+    from dashboard.backend import config as config_mod
+    from dashboard.backend import experiments as exp_module
+
+    caps = config_mod.Capabilities(
+        mode="live", can_read_runs=True, can_start_experiments=True,
+        is_root=False, start_mechanism="launcher", launcher_available=True,
+        launcher_detail="launcher daemon reachable",
+    )
+    monkeypatch.setattr(exp_module, "probe_capabilities", lambda: caps)
+    monkeypatch.setattr(exp_module, "LAUNCHER", fake)
+    return caps
+
+
+def test_start_delegates_to_the_launcher_when_available(monkeypatch):
+    fake = _FakeLauncher()
+    _force_launcher_path(monkeypatch, fake)
+    manager = ExperimentManager()
+    result = manager.start("B", "heavy", 3, 60, idle_timeout=15)
+    assert result["started_via"] == "launcher"
+    assert fake.started[0]["variant"] == "B"
+    assert fake.started[0]["idle_timeout"] == 15
+
+
+def test_start_drops_idle_timeout_for_variant_c(monkeypatch):
+    """C selects its own; forwarding one would be a setting with no effect."""
+    fake = _FakeLauncher()
+    _force_launcher_path(monkeypatch, fake)
+    ExperimentManager().start("C", "heavy", 1, 60, idle_timeout=15)
+    assert fake.started[0]["idle_timeout"] is None
+
+
+def test_launcher_refusal_becomes_a_conflict(monkeypatch):
+    from dashboard.launcher.client import LauncherError
+
+    fake = _FakeLauncher(
+        raise_on_start=LauncherError("an experiment is already running (exp-x)")
+    )
+    _force_launcher_path(monkeypatch, fake)
+    with pytest.raises(ExperimentError) as excinfo:
+        ExperimentManager().start("A", "light", 1, 30)
+    assert excinfo.value.status == 409
+
+
+def test_launcher_unavailable_becomes_503(monkeypatch):
+    from dashboard.launcher.client import LauncherUnavailable
+
+    fake = _FakeLauncher(raise_on_start=LauncherUnavailable("daemon is gone"))
+    _force_launcher_path(monkeypatch, fake)
+    with pytest.raises(ExperimentError) as excinfo:
+        ExperimentManager().start("A", "light", 1, 30)
+    assert excinfo.value.status == 503
+
+
+def test_stop_via_launcher_requires_a_matching_id(monkeypatch):
+    """A stale browser tab must not stop an experiment it is not looking at."""
+    fake = _FakeLauncher(current={"experiment_id": "exp-20261023-125758-c3da5252",
+                                  "running": True})
+    _force_launcher_path(monkeypatch, fake)
+    manager = ExperimentManager()
+    with pytest.raises(ExperimentError) as excinfo:
+        manager.stop(experiment_id="exp-20200101-000000-deadbeef")
+    assert excinfo.value.status == 409
+    assert fake.stopped == []
+
+
+def test_stop_via_launcher_succeeds_with_the_right_id(monkeypatch):
+    fake = _FakeLauncher(current={"experiment_id": "exp-20261023-125758-c3da5252",
+                                  "running": True})
+    _force_launcher_path(monkeypatch, fake)
+    result = ExperimentManager().stop(
+        experiment_id="exp-20261023-125758-c3da5252"
+    )
+    assert fake.stopped == ["exp-20261023-125758-c3da5252"]
+    assert "incomplete" in result["note"]
+
+
+def test_stop_via_launcher_with_nothing_running(monkeypatch):
+    fake = _FakeLauncher(current=None)
+    _force_launcher_path(monkeypatch, fake)
+    with pytest.raises(ExperimentError) as excinfo:
+        ExperimentManager().stop()
+    assert excinfo.value.status == 409
+
+
+def test_inject_link_requires_the_launcher(monkeypatch):
+    _force_direct_path(monkeypatch, is_root=True)
+    with pytest.raises(ExperimentError) as excinfo:
+        ExperimentManager().inject_link("exp-20261023-125758-c3da5252",
+                                        "link_down", "s1-s2")
+    assert excinfo.value.status == 503
+
+
+def test_inject_link_delegates_to_the_launcher(monkeypatch):
+    fake = _FakeLauncher(current={"experiment_id": "exp-20261023-125758-c3da5252",
+                                  "running": True})
+    _force_launcher_path(monkeypatch, fake)
+    result = ExperimentManager().inject_link(
+        "exp-20261023-125758-c3da5252", "link_down", "s1-s2"
+    )
+    assert fake.injected == [("exp-20261023-125758-c3da5252", "link_down", "s1-s2")]
+    assert "switches confirm" in result["note"]
+
+
+def test_inject_link_endpoint_validates_body(client):
+    assert client.post("/api/experiments/inject-link",
+                       json={"experiment_id": "x"}).status_code == 400
+    assert client.post("/api/experiments/inject-link",
+                       content="not json").status_code == 400
+
+
+def test_links_endpoint_lists_only_core_links(client):
+    body = client.get("/api/experiments/links").json()
+    ids = {l["id"] for l in body["links"]}
+    expected = {"-".join(sorted([l.a, l.b])) for l in spec.CORE_LINKS}
+    assert ids == expected
+    # Host access links must not be offered.
+    assert not any("h" in i for i in ids)
 
 
 def test_start_endpoint_rejects_non_json_body(client):

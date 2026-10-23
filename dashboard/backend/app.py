@@ -115,6 +115,10 @@ def capabilities() -> Dict[str, object]:
         "can_query_switches_directly": caps.can_query_switches_directly,
         "reason_cannot_start": caps.reason_cannot_start,
         "reason_cannot_query": caps.reason_cannot_query,
+        "start_mechanism": caps.start_mechanism,
+        "launcher_available": caps.launcher_available,
+        "launcher_detail": caps.launcher_detail,
+        "launcher_socket": caps.launcher_socket,
         "notes": caps.notes,
         "project_root": caps.project_root,
         "runs_dir": caps.runs_dir,
@@ -329,11 +333,82 @@ async def experiments_start(request: Request) -> Dict[str, object]:
 
 
 @app.post("/api/experiments/stop")
-def experiments_stop() -> Dict[str, object]:
+async def experiments_stop(request: Request) -> Dict[str, object]:
+    """Stop a running experiment, addressed by id where one exists."""
+    experiment_id: Optional[str] = None
     try:
-        return MANAGER.stop()
+        body = await request.json()
+        if isinstance(body, dict):
+            value = body.get("experiment_id")
+            if value is not None:
+                experiment_id = str(value)
+    except (json.JSONDecodeError, ValueError):
+        # A body is optional: the direct (root-API) path has only one child
+        # to stop. The launcher path resolves the id itself and verifies it.
+        pass
+
+    try:
+        return MANAGER.stop(experiment_id=experiment_id)
     except ExperimentError as exc:
         raise HTTPException(status_code=exc.status, detail=exc.message)
+
+
+@app.post("/api/experiments/inject-link")
+async def experiments_inject_link(request: Request) -> Dict[str, object]:
+    """Bring a link down or up inside the *running* experiment.
+
+    This is a real action: the runner applies it to the live Mininet session
+    and it shows up in the flow dumps and event log. The topology view will
+    not redraw until the switches confirm it.
+    """
+    try:
+        body = await request.json()
+    except (json.JSONDecodeError, ValueError):
+        raise HTTPException(status_code=400, detail="request body must be JSON")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="request body must be an object")
+
+    experiment_id = body.get("experiment_id")
+    action = body.get("action")
+    link = body.get("link")
+    if not isinstance(experiment_id, str) or not isinstance(action, str) \
+            or not isinstance(link, str):
+        raise HTTPException(
+            status_code=400,
+            detail="experiment_id, action and link are required strings",
+        )
+
+    try:
+        return MANAGER.inject_link(experiment_id, action, link)
+    except ExperimentError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.message)
+
+
+@app.get("/api/experiments/links")
+def experiments_links() -> Dict[str, object]:
+    """Links that may be targeted by an injection, from the real topology."""
+    from topo import spec as _spec
+    return {
+        "links": [
+            {
+                "id": "-".join(sorted([link.a, link.b])),
+                "endpoints": [link.a, link.b],
+                "bandwidth_mbit": link.bw_mbit,
+                "delay_ms": link.delay_ms,
+                "on_paths": [
+                    name for name, members in _spec.PATH_LINKS.items()
+                    if frozenset({link.a, link.b}) in members
+                ],
+            }
+            for link in _spec.CORE_LINKS
+        ],
+        "actions": ["link_down", "link_up"],
+        "note": (
+            "Only switch-to-switch links can be cut. Host access links are "
+            "not offered: the controller observes port status on core links, "
+            "and the experiment's routing decision is about core paths."
+        ),
+    }
 
 
 @app.get("/api/experiments/command")

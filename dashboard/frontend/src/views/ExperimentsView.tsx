@@ -56,7 +56,8 @@ export function ExperimentsView() {
   const selectsOwnTimeout = opts.variants.find((v) => v.id === variant)?.selects_own_timeout;
   const canStart = st?.can_start ?? false;
   const launched = st?.launched_by_dashboard as Record<string, unknown> | null;
-  const dashboardRunning = Boolean(launched && launched.running);
+  const launcherCurrent = st?.launcher?.current ?? null;
+  const dashboardRunning = Boolean(launcherCurrent?.running) || Boolean(launched && launched.running);
 
   const start = async () => {
     setBusy(true);
@@ -79,7 +80,9 @@ export function ExperimentsView() {
     setBusy(true);
     setMessage(null);
     try {
-      const result = await api.experimentStop();
+      // Pass the id explicitly: the server refuses a mismatch, so a stale tab
+      // cannot stop an experiment it is not actually looking at.
+      const result = await api.experimentStop(launcherCurrent?.experiment_id);
       setMessage({ kind: "ok", text: String(result.note ?? "Experiment stopped.") });
       void status.refresh();
     } catch (cause) {
@@ -232,19 +235,16 @@ export function ExperimentsView() {
           </div>
         </Card>
 
-        <Card title="Link failure" subtitle="How failures are injected">
-          <p className="text-[11px] leading-relaxed" style={{ color: "var(--text-3)" }}>
-            Link failure is not a separate button. The runner owns the Mininet
-            session, so a link can only be cut from inside it — the{" "}
-            <span className="mono">failure</span> workload brings{" "}
-            <span className="mono">s1-s2</span> down partway through the run and
-            restores it later. Choose that workload to exercise recovery; the
-            topology view and event log show the real failure when it happens.
-          </p>
-        </Card>
+        <LinkInjectionPanel
+          experimentId={launcherCurrent?.experiment_id ?? null}
+          enabled={Boolean(st?.can_inject_link)}
+          onDone={() => void status.refresh()}
+        />
       </div>
 
       <div className="flex flex-col gap-4">
+        <LauncherStatusCard status={st} />
+
         <Card
           title="Current activity"
           right={<SourceBadge source="live" />}
@@ -331,5 +331,156 @@ export function ExperimentsView() {
         )}
       </div>
     </div>
+  );
+}
+
+/** Privileged-launcher status.
+ *
+ * Shows how a start request would actually be served, because "Start" being
+ * greyed out with no explanation is the problem this whole feature exists to
+ * fix.
+ */
+function LauncherStatusCard({ status }: { status?: ExperimentStatus | null }) {
+  if (!status) return null;
+  const mechanism = status.start_mechanism;
+  const tone =
+    mechanism === "launcher" ? "ok" : mechanism === "root_api" ? "warn" : "idle";
+  const label =
+    mechanism === "launcher"
+      ? "Privileged launcher connected"
+      : mechanism === "root_api"
+        ? "API is running as root"
+        : "No privileged launcher";
+
+  return (
+    <Card title="Experiment launching" right={<SourceBadge source="live" />}>
+      <div className="flex items-center gap-2 mb-2">
+        <StatusDot tone={tone as "ok" | "warn" | "idle"} />
+        <span className="text-[12px] font-medium">{label}</span>
+      </div>
+      <p className="text-[11px] leading-relaxed" style={{ color: "var(--text-3)" }}>
+        {mechanism === "launcher" ? (
+          <>
+            This API is unprivileged and asks a small root daemon over a Unix
+            socket to start and stop experiments. Nothing you type becomes part
+            of a command: the daemon builds the command line itself from a
+            fixed allowlist.
+          </>
+        ) : mechanism === "root_api" ? (
+          <>
+            The API itself has root, so it launches the runner directly. This
+            works, but a root-capable web service is a larger attack surface
+            than necessary; running the launcher daemon and keeping the API
+            unprivileged is the recommended setup.
+          </>
+        ) : (
+          <>{status.launcher_detail || "Experiments cannot be started from the browser."}</>
+        )}
+      </p>
+      {status.launcher_error && (
+        <p className="text-[11px] mt-2" style={{ color: "var(--warn)" }}>
+          Launcher error: {status.launcher_error}
+        </p>
+      )}
+    </Card>
+  );
+}
+
+/** Inject a link failure into the experiment that is running now.
+ *
+ * This is a real action applied to the live Mininet session by the runner,
+ * not an animation. It is only offered while an experiment the dashboard
+ * started is running, because nothing else can safely own the change.
+ */
+function LinkInjectionPanel({
+  experimentId,
+  enabled,
+  onDone,
+}: {
+  experimentId: string | null;
+  enabled: boolean;
+  onDone: () => void;
+}) {
+  const links = useAsync(() => api.experimentLinks(), []);
+  const [link, setLink] = useState("s1-s2");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  const send = async (action: "link_down" | "link_up") => {
+    if (!experimentId) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      const result = await api.experimentInjectLink({
+        experiment_id: experimentId,
+        action,
+        link,
+      });
+      setNote({ kind: "ok", text: String(result.note ?? "Queued.") });
+      onDone();
+    } catch (cause) {
+      setNote({
+        kind: "err",
+        text: cause instanceof Error ? cause.message : String(cause),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card
+      title="Inject a link failure"
+      subtitle="Applied to the live Mininet session by the runner"
+    >
+      {!enabled ? (
+        <p className="text-[11px] leading-relaxed" style={{ color: "var(--text-3)" }}>
+          Available while an experiment started from this dashboard is running.
+          The runner owns the Mininet session, so only it can change a link —
+          the dashboard asks, it acts, and the controller observes the port
+          going down exactly as it would for any real failure.
+          {" "}The <span className="mono">failure</span> workload also schedules
+          its own cut of <span className="mono">s1-s2</span> partway through.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          <Field label="Link" hint={links.data?.note}>
+            <select
+              value={link}
+              onChange={(e) => setLink(e.target.value)}
+              className={inputClass}
+              style={inputStyle}
+            >
+              {(links.data?.links ?? []).map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.id} — {l.bandwidth_mbit} Mbit
+                  {l.on_paths.length > 0 ? ` (path ${l.on_paths.join("/")})` : ""}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <div className="flex gap-2">
+            <Button variant="danger" onClick={() => send("link_down")} disabled={busy}>
+              Bring link down
+            </Button>
+            <Button onClick={() => send("link_up")} disabled={busy}>
+              Restore link
+            </Button>
+          </div>
+          {note && (
+            <p
+              className="text-[11px] leading-relaxed"
+              style={{ color: note.kind === "ok" ? "var(--ok)" : "var(--bad)" }}
+            >
+              {note.text}
+            </p>
+          )}
+          <p className="text-[10px] leading-relaxed" style={{ color: "var(--text-3)" }}>
+            The topology view will not redraw until the switches confirm the
+            change in a flow dump, so a brief delay is expected and correct.
+          </p>
+        </div>
+      )}
+    </Card>
   );
 }

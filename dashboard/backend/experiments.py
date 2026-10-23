@@ -29,8 +29,13 @@ import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
+from . import launcher_link
 from .config import PROJECT_ROOT, probe_capabilities
+from .launcher_link import CLIENT as LAUNCHER
 from .runs import live_status, scan_experiment_processes
+
+from dashboard.launcher.client import LauncherError, LauncherUnavailable
+from dashboard.launcher.protocol import ProtocolError
 
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
@@ -178,29 +183,75 @@ class ExperimentManager:
             self._reap()
             launched = self._record.as_dict() if self._record else None
         live = live_status()
+        caps = probe_capabilities()
+
+        launcher_payload: Optional[Dict[str, object]] = None
+        launcher_error: Optional[str] = None
+        launcher_pids: set = set()
+        if caps.launcher_available:
+            try:
+                reply = LAUNCHER.status()
+                current = reply.get("current")
+                launcher_payload = {
+                    "current": current,
+                    "history": reply.get("history", []),
+                }
+                if isinstance(current, dict) and current.get("pid"):
+                    launcher_pids.add(int(current["pid"]))
+            except (LauncherUnavailable, LauncherError) as exc:
+                launcher_error = str(exc)
+                launcher_link.invalidate()
+
+        # A process is "external" only if neither we nor the launcher started
+        # it. Without this, an experiment the user launched from the browser
+        # would be reported as a foreign process and block further use.
         external = [
             p for p in scan_experiment_processes()
-            if not (self._record and p.pid == self._record.pid)
-            and "run_experiment" in p.cmd
+            if "run_experiment" in p.cmd
+            and not (self._record and p.pid == self._record.pid)
+            and p.pid not in launcher_pids
         ]
-        caps = probe_capabilities()
+
+        launcher_running = bool(
+            launcher_payload and launcher_payload.get("current")
+        )
+        blocked = self._blocked_reason(
+            caps, live.active, bool(external), launcher_running
+        )
         return {
             "launched_by_dashboard": launched,
+            "launcher": launcher_payload,
+            "launcher_available": caps.launcher_available,
+            "launcher_detail": caps.launcher_detail,
+            "launcher_error": launcher_error,
+            "start_mechanism": caps.start_mechanism,
             "live_run": live.as_dict(),
             "external_experiment_running": bool(external),
             "external_processes": [
                 {"pid": p.pid, "cmd": p.cmd, "elapsed_s": p.elapsed_s}
                 for p in external
             ],
-            "can_start": caps.can_start_experiments and not live.active and not external,
-            "blocked_reason": self._blocked_reason(caps, live.active, bool(external)),
+            "can_start": (
+                caps.can_start_experiments
+                and not live.active
+                and not external
+                and not launcher_running
+            ),
+            "blocked_reason": blocked,
+            "can_inject_link": launcher_running,
             "history": [h.as_dict() for h in self._history[-20:]],
         }
 
     @staticmethod
-    def _blocked_reason(caps, live_active: bool, external: bool) -> Optional[str]:
+    def _blocked_reason(caps, live_active: bool, external: bool,
+                        launcher_running: bool = False) -> Optional[str]:
         if not caps.can_start_experiments:
             return caps.reason_cannot_start
+        if launcher_running:
+            return (
+                "An experiment started from this dashboard is still running. "
+                "Stop it before starting another."
+            )
         if live_active or external:
             return (
                 "An experiment is already running. Mininet, Open vSwitch and "
@@ -217,6 +268,14 @@ class ExperimentManager:
 
         caps = probe_capabilities()
         argv = self.build_command(variant, workload, seed, duration_s, idle_timeout)
+
+        # Preferred path: hand the request to the privileged daemon, which
+        # does its own validation and owns the process. The API stays
+        # unprivileged.
+        if caps.launcher_available:
+            return self._start_via_launcher(
+                variant, workload, seed, duration_s, idle_timeout
+            )
 
         live = live_status()
         external = [p for p in scan_experiment_processes() if "run_experiment" in p.cmd]
@@ -272,6 +331,35 @@ class ExperimentManager:
             )
             return self._record.as_dict()
 
+    def _start_via_launcher(self, variant: str, workload: str, seed: int,
+                            duration_s: int,
+                            idle_timeout: Optional[int]) -> Dict[str, object]:
+        """Delegate the launch to the privileged daemon."""
+        # Variant C picks its own timeout, so passing one would be a silent
+        # lie in the UI. The daemon rejects it; drop it here with the same
+        # reasoning so the user never sees a confusing refusal.
+        effective_timeout = None if variant == "C" else idle_timeout
+        try:
+            reply = LAUNCHER.start(
+                variant=variant, workload=workload, seed=seed,
+                duration_s=duration_s, idle_timeout=effective_timeout,
+            )
+        except LauncherUnavailable as exc:
+            launcher_link.invalidate()
+            raise ExperimentError(str(exc), status=503)
+        except LauncherError as exc:
+            # The daemon refused: already running, validation, launch failure.
+            status = 409 if "already running" in exc.message else 400
+            raise ExperimentError(exc.message, status=status)
+        except ProtocolError as exc:
+            raise ExperimentError(str(exc), status=400)
+
+        experiment = reply.get("experiment", {})
+        if isinstance(experiment, dict):
+            experiment = dict(experiment)
+            experiment["started_via"] = "launcher"
+        return experiment
+
     @staticmethod
     def build_command(variant: str, workload: str, seed: int, duration_s: int,
                       idle_timeout: Optional[int] = None) -> List[str]:
@@ -289,14 +377,23 @@ class ExperimentManager:
         return argv
 
     # -------------------------------------------------------------------- stop
-    def stop(self, timeout_s: float = 30.0) -> Dict[str, object]:
-        """Stop only the experiment this backend started.
+    def stop(self, experiment_id: Optional[str] = None,
+             timeout_s: float = 30.0) -> Dict[str, object]:
+        """Stop only the experiment this dashboard started.
 
         SIGTERM first and a generous wait: the runner's teardown stops Mininet,
         flushes telemetry and writes the manifest. SIGKILL would leave a
         half-written run directory and orphan the controller, which is exactly
         the failure mode that corrupted earlier development runs.
+
+        When the launcher owns the experiment, the stop is addressed to it by
+        ``experiment_id``. The id is required in that case: stopping "whatever
+        is running" from a web button is how the wrong experiment gets killed.
         """
+        caps = probe_capabilities()
+        if caps.launcher_available:
+            return self._stop_via_launcher(experiment_id)
+
         with self._lock:
             self._reap()
             if self._proc is None or self._record is None:
@@ -351,7 +448,90 @@ class ExperimentManager:
         )
         return result
 
+    def _stop_via_launcher(self, experiment_id: Optional[str]) -> Dict[str, object]:
+        try:
+            status = LAUNCHER.status()
+        except (LauncherUnavailable, LauncherError) as exc:
+            launcher_link.invalidate()
+            raise ExperimentError(str(exc), status=503)
+
+        current = status.get("current")
+        if not isinstance(current, dict):
+            raise ExperimentError(
+                "No experiment started from this dashboard is running. "
+                "Experiments started in a terminal are deliberately not "
+                "stoppable from the browser.",
+                status=409,
+            )
+
+        running_id = str(current.get("experiment_id", ""))
+        if experiment_id and experiment_id != running_id:
+            raise ExperimentError(
+                f"experiment_id {experiment_id!r} is not the running "
+                f"experiment ({running_id!r}); refusing to stop it.",
+                status=409,
+            )
+
+        try:
+            reply = LAUNCHER.stop(running_id)
+        except LauncherUnavailable as exc:
+            launcher_link.invalidate()
+            raise ExperimentError(str(exc), status=503)
+        except LauncherError as exc:
+            raise ExperimentError(exc.message, status=409)
+        except ProtocolError as exc:
+            raise ExperimentError(str(exc), status=400)
+
+        result = dict(reply.get("experiment", {}))
+        result["note"] = (
+            "The runner was asked to stop. A run cut short is marked "
+            "incomplete in its manifest, and the analysis excludes incomplete "
+            "runs and reports how many it excluded."
+        )
+        return result
+
+    def inject_link(self, experiment_id: str, action: str,
+                    link: str) -> Dict[str, object]:
+        """Ask the running experiment to bring a link down or up.
+
+        The dashboard never touches Mininet. The launcher appends a command to
+        the run's control file and the runner -- which owns the Mininet
+        session -- validates the link against the real topology and applies
+        it. The result is observable in the flow dumps and the event log like
+        any other link event, so nothing here is simulated.
+        """
+        caps = probe_capabilities()
+        if not caps.launcher_available:
+            raise ExperimentError(
+                "Link injection needs the privileged launcher, which is not "
+                "running. " + (caps.reason_cannot_start or ""),
+                status=503,
+            )
+        try:
+            reply = LAUNCHER.inject_link(experiment_id, action, link)
+        except LauncherUnavailable as exc:
+            launcher_link.invalidate()
+            raise ExperimentError(str(exc), status=503)
+        except LauncherError as exc:
+            raise ExperimentError(exc.message, status=409)
+        except ProtocolError as exc:
+            raise ExperimentError(str(exc), status=400)
+        return {
+            "queued": reply.get("command"),
+            "note": (
+                "Queued for the runner. It is applied within about a second "
+                "and will appear in the event log and the next flow dump; the "
+                "topology view will not show it until the switches confirm."
+            ),
+        }
+
     def read_log(self, lines: int = 200) -> Dict[str, object]:
+        caps = probe_capabilities()
+        if caps.launcher_available:
+            launcher_log = self._read_launcher_log(lines)
+            if launcher_log is not None:
+                return launcher_log
+
         with self._lock:
             record = self._record
         if record is None:
@@ -366,6 +546,44 @@ class ExperimentManager:
         return {
             "available": True,
             "path": record.log_path,
+            "lines": [ln.rstrip("\n") for ln in filtered[-lines:]],
+            "truncated": len(filtered) > lines,
+        }
+
+
+    def _read_launcher_log(self, lines: int) -> Optional[Dict[str, object]]:
+        """Tail the log of the launcher's current or most recent experiment."""
+        try:
+            status = LAUNCHER.status()
+        except (LauncherUnavailable, LauncherError):
+            launcher_link.invalidate()
+            return None
+
+        entry = status.get("current")
+        if not isinstance(entry, dict):
+            history = status.get("history") or []
+            entry = history[-1] if history else None
+        if not isinstance(entry, dict):
+            return None
+
+        path = entry.get("log_path")
+        if not isinstance(path, str) or not os.path.exists(path):
+            return {"available": False,
+                    "reason": "the launcher has not written a log yet"}
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as fh:
+                content = fh.readlines()
+        except OSError as exc:
+            return {"available": False, "reason": f"cannot read log: {exc}"}
+
+        # Mininet's tc emits a harmless htb quantum warning on every link.
+        filtered = [ln for ln in content if "sch_htb" not in ln]
+        return {
+            "available": True,
+            "path": path,
+            "experiment_id": entry.get("experiment_id"),
+            "running": entry.get("running"),
+            "source": "launcher",
             "lines": [ln.rstrip("\n") for ln in filtered[-lines:]],
             "truncated": len(filtered) > lines,
         }

@@ -34,6 +34,28 @@ export interface Capabilities {
   notes: string[];
   project_root: string;
   runs_dir: string;
+  /** How a start request would be served: via the privileged daemon, by a
+   *  root API process, or not at all. */
+  start_mechanism?: "launcher" | "root_api" | "none";
+  launcher_available?: boolean;
+  launcher_detail?: string;
+  launcher_socket?: string;
+}
+
+export interface LauncherExperiment {
+  experiment_id: string;
+  params: Record<string, unknown>;
+  pid: number;
+  started_at: number;
+  elapsed_s: number;
+  finished_at: number | null;
+  returncode: number | null;
+  stopped_by: string | null;
+  running: boolean;
+  log_path: string;
+  run_dir: string | null;
+  command: string;
+  injections: Record<string, unknown>[];
 }
 
 export interface LiveStatus {
@@ -266,10 +288,19 @@ export interface RunSummary {
 
 export interface ExperimentStatus {
   launched_by_dashboard: Record<string, unknown> | null;
+  launcher: {
+    current: LauncherExperiment | null;
+    history: LauncherExperiment[];
+  } | null;
+  launcher_available: boolean;
+  launcher_detail: string;
+  launcher_error: string | null;
+  start_mechanism: "launcher" | "root_api" | "none";
   live_run: LiveStatus;
   external_experiment_running: boolean;
   external_processes: { pid: number; cmd: string; elapsed_s: number }[];
   can_start: boolean;
+  can_inject_link: boolean;
   blocked_reason: string | null;
   history: Record<string, unknown>[];
 }

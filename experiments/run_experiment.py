@@ -71,24 +71,60 @@ DEFAULT_FIXED_IDLE_TIMEOUT_S = 15
 # --------------------------------------------------------------------------
 
 def _cmd(args: List[str]) -> str:
+    """Run a command and return its first line, or "" if it failed.
+
+    Returning the *error text* on failure (as this used to) is worse than
+    returning nothing: a provenance field reading "fatal: ..." looks like a
+    recorded value and silently passes any check that only tests for
+    non-emptiness.
+    """
     try:
         out = subprocess.run(args, capture_output=True, text=True, timeout=15)
-        return (out.stdout or out.stderr).strip().splitlines()[0] if (out.stdout or out.stderr) else ""
-    except Exception as exc:
-        return f"<unavailable: {exc}>"
+        if out.returncode != 0:
+            return ""
+        text = (out.stdout or "").strip()
+        return text.splitlines()[0] if text else ""
+    except Exception:
+        return ""
+
+
+#: Experiments run as root while the checkout is owned by the developer, so
+#: git refuses to operate on it ("detected dubious ownership") unless the
+#: directory is explicitly trusted for this invocation. This is scoped to a
+#: single command via -c; it does not change the user's git configuration.
+_GIT_BASE = ["git", "-c", f"safe.directory={PROJECT_ROOT}", "-C", PROJECT_ROOT]
+
+
+def _git_commit() -> Optional[str]:
+    """Current commit hash, or None if it genuinely cannot be determined."""
+    value = _cmd(_GIT_BASE + ["rev-parse", "HEAD"])
+    return value or None
+
+
+def _git_dirty() -> Optional[bool]:
+    """Whether the tree has uncommitted changes, or None if unknown.
+
+    None matters: reporting False when the check failed would claim the run
+    came from a clean tree without having established it.
+    """
+    try:
+        out = subprocess.run(
+            _GIT_BASE + ["status", "--porcelain"],
+            capture_output=True, text=True, timeout=15,
+        )
+    except Exception:
+        return None
+    if out.returncode != 0:
+        return None
+    return bool(out.stdout.strip())
 
 
 def provenance() -> Dict[str, object]:
     """Record the exact software stack. Results without this are not reproducible."""
     return {
         "recorded_at_utc": datetime.now(timezone.utc).isoformat(),
-        "git_commit": _cmd(["git", "-C", PROJECT_ROOT, "rev-parse", "HEAD"]),
-        "git_dirty": bool(
-            subprocess.run(
-                ["git", "-C", PROJECT_ROOT, "status", "--porcelain"],
-                capture_output=True, text=True,
-            ).stdout.strip()
-        ),
+        "git_commit": _git_commit(),
+        "git_dirty": _git_dirty(),
         "python": sys.version.split()[0],
         "platform": platform.platform(),
         "kernel": platform.release(),
@@ -140,6 +176,114 @@ class FlowDumper(threading.Thread):
                 fh.write("\n".join(lines) + "\n")
             self.samples += 1
             self._stop.wait(self.interval)
+
+    def stop(self) -> None:
+        self._stop.set()
+
+
+class ControlListener(threading.Thread):
+    """Apply link-state commands handed to a *running* experiment.
+
+    The dashboard cannot touch Mininet: it is unprivileged, and the Mininet
+    session belongs to this process. So an operator action arrives as a line
+    appended to ``<run_dir>/control.jsonl`` by the privileged launcher, and
+    this thread -- inside the process that owns ``net`` -- validates and
+    applies it.
+
+    Validation here is not a formality. The link name is checked against
+    ``topo.spec``'s real core links before anything is touched, so a command
+    naming a link that does not exist, or a host access link, is rejected
+    rather than passed to Mininet. Every command and its outcome is recorded,
+    so an injected failure is as auditable as a scheduled one.
+    """
+
+    POLL_INTERVAL_S = 0.5
+
+    def __init__(self, run_dir: str, net, events: List[Dict[str, object]]):
+        super().__init__(daemon=True)
+        self.control_path = os.path.join(run_dir, "control.jsonl")
+        self.result_path = os.path.join(run_dir, "control_results.jsonl")
+        self.net = net
+        self.events = events
+        self._stop = threading.Event()
+        self._consumed = 0
+        #: Unordered switch pairs that are genuinely links in this topology.
+        self._valid_links = {
+            frozenset({link.a, link.b}) for link in spec.CORE_LINKS
+        }
+
+    def run(self) -> None:
+        while not self._stop.is_set():
+            try:
+                self._poll()
+            except Exception:  # a bad command must not kill the listener
+                pass
+            self._stop.wait(self.POLL_INTERVAL_S)
+
+    def _poll(self) -> None:
+        if not os.path.exists(self.control_path):
+            return
+        with open(self.control_path, "r", encoding="utf-8") as fh:
+            lines = fh.readlines()
+        if len(lines) <= self._consumed:
+            return
+        pending = lines[self._consumed:]
+        self._consumed = len(lines)
+        for line in pending:
+            line = line.strip()
+            if line:
+                self._apply(line)
+
+    def _apply(self, line: str) -> None:
+        try:
+            command = json.loads(line)
+        except json.JSONDecodeError:
+            self._record({"ok": False, "error": "malformed command", "raw": line[:200]})
+            return
+
+        action = command.get("action")
+        link = command.get("link")
+        if action not in ("link_down", "link_up"):
+            self._record({**command, "ok": False, "error": "unknown action"})
+            return
+        if not isinstance(link, str) or "-" not in link:
+            self._record({**command, "ok": False, "error": "malformed link"})
+            return
+
+        a, _, b = link.partition("-")
+        if frozenset({a, b}) not in self._valid_links:
+            self._record({
+                **command, "ok": False,
+                "error": f"{link} is not a core link in this topology",
+            })
+            return
+
+        state = "down" if action == "link_down" else "up"
+        try:
+            self.net.configLinkStatus(a, b, state)
+        except Exception as exc:
+            self._record({**command, "ok": False,
+                          "error": f"{type(exc).__name__}: {exc}"})
+            return
+
+        applied_at = time.time()
+        self._record({**command, "ok": True, "applied_at": applied_at,
+                      "state": state})
+        self.events.append({
+            "kind": f"injected_{action}",
+            "link": link,
+            "t": applied_at,
+            "source": "dashboard",
+        })
+        print(f"  [control] {action} on {link} applied")
+
+    def _record(self, payload: Dict[str, object]) -> None:
+        try:
+            with open(self.result_path, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(payload, sort_keys=True) + "\n")
+                fh.flush()
+        except OSError:
+            pass
 
     def stop(self) -> None:
         self._stop.set()
@@ -342,6 +486,7 @@ def run_single(
     )
     net = None
     dumper = None
+    controller_listener = None
     try:
         controller.start()
         if not controller.wait_ready(timeout=25):
@@ -368,7 +513,17 @@ def run_single(
             net.configLinkStatus(a, b, action)
 
         workload = build_workload(workload_name, seed, raw_dir, duration_s)
+
+        # Accept operator link-state commands for the lifetime of the run.
+        # Started after the topology is verified so a command can never be
+        # applied to a half-built network.
+        injected_events: List[Dict[str, object]] = []
+        controller_listener = ControlListener(run_dir, net, injected_events)
+        controller_listener.start()
+
         result = workload.run(net, link_control=link_control)
+        if injected_events:
+            result.events.extend(injected_events)
 
         with open(os.path.join(run_dir, "workload.json"), "w", encoding="utf-8") as fh:
             json.dump(result.as_dict(), fh, indent=2, sort_keys=True)
@@ -379,6 +534,9 @@ def run_single(
         status["errors"].append(f"{type(exc).__name__}: {exc}")
         print(f"  !! run failed: {exc}")
     finally:
+        if controller_listener is not None:
+            controller_listener.stop()
+            controller_listener.join(timeout=5)
         if dumper is not None:
             dumper.stop()
             dumper.join(timeout=10)

@@ -1,0 +1,50 @@
+# systemd unit for the privileged experiment launcher.
+#
+#   sudo cp dashboard/launcher/sdn-rl-launcher.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now sdn-rl-launcher
+#
+# Adjust WorkingDirectory and --allow-uid if your checkout lives elsewhere or
+# the dashboard runs as a different user.
+#
+# This service runs as root because Mininet requires it. The hardening options
+# below are the ones compatible with that requirement: Mininet needs to create
+# network namespaces and veth pairs and to write run output, so the usual
+# PrivateNetwork/ProtectSystem=strict settings cannot be used. What is left
+# still removes a meaningful amount of ambient authority.
+
+[Unit]
+Description=SDN+RL privileged experiment launcher
+Documentation=file:///home/tathwaykumar/sdn-rl-project/dashboard/launcher/README.md
+After=network.target openvswitch-switch.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/tathwaykumar/sdn-rl-project
+ExecStart=/usr/bin/python3 -W ignore::SyntaxWarning -m dashboard.launcher.daemon --allow-uid 1000
+Environment=PYTHONPATH=/home/tathwaykumar/sdn-rl-project
+Environment=PYTHONWARNINGS=ignore::SyntaxWarning
+
+Restart=on-failure
+RestartSec=5
+
+# The socket lives in /run/sdn-rl; systemd creates and cleans it up for us.
+RuntimeDirectory=sdn-rl
+RuntimeDirectoryMode=0750
+
+# Modest hardening. Mininet rules out the stronger options.
+NoNewPrivileges=no
+ProtectHome=no
+ProtectSystem=no
+PrivateTmp=no
+ProtectKernelLogs=yes
+ProtectControlGroups=no
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

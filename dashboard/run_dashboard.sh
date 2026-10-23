@@ -65,5 +65,19 @@ echo "==> UI     http://127.0.0.1:${UI_PORT}"
 UI_PID=$!
 
 echo
+if [[ -S /run/sdn-rl/launcher.sock ]]; then
+  echo "==> Privileged launcher detected: experiments can be started from the browser."
+else
+  cat <<'HINT'
+==> The privileged launcher is not running, so the browser cannot start
+    experiments (everything else works). To enable it, in another terminal:
+
+        sudo python3 -m dashboard.launcher.daemon
+
+    Security model and systemd unit: dashboard/launcher/README.md
+HINT
+fi
+
+echo
 echo "==> Open http://127.0.0.1:${UI_PORT} — Ctrl-C to stop both."
 wait

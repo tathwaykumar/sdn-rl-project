@@ -278,6 +278,38 @@ def run_metrics(run: Run, window: str) -> Dict[str, object]:
 # Aggregation
 # --------------------------------------------------------------------------
 
+def modal_duration(rows: List[Dict[str, object]]) -> Optional[float]:
+    """The duration most runs share, which defines the comparable population."""
+    counts: Dict[float, int] = defaultdict(int)
+    for row in rows:
+        value = row.get("duration_s")
+        if isinstance(value, (int, float)):
+            counts[float(value)] += 1
+    if not counts:
+        return None
+    return max(counts.items(), key=lambda kv: (kv[1], kv[0]))[0]
+
+
+def split_by_duration(rows: List[Dict[str, object]], duration: Optional[float]
+                      ) -> Tuple[List[Dict[str, object]], List[Dict[str, object]]]:
+    """Separate runs of the comparable duration from the rest.
+
+    Every metric here depends on how long the run lasted -- total table
+    misses and controller messages are cumulative, and the RL variants have
+    had more or fewer learning steps. Averaging a 30-second ad-hoc run from
+    the dashboard together with the 90-second matrix runs would quietly
+    compare different experiments. The odd ones out are reported, not hidden.
+    """
+    if duration is None:
+        return rows, []
+    keep, drop = [], []
+    for row in rows:
+        value = row.get("duration_s")
+        (keep if isinstance(value, (int, float)) and float(value) == duration
+         else drop).append(row)
+    return keep, drop
+
+
 def aggregate(rows: List[Dict[str, object]], window: str
               ) -> Dict[Tuple[str, str], Dict[str, stats.Summary]]:
     """Group per-run metrics by (workload, variant) and summarise each cell."""
@@ -388,6 +420,15 @@ def main(argv=None) -> int:
         for window in ("full", "second_half"):
             rows.append(run_metrics(run, window))
 
+    # Only runs of the same duration are comparable; see split_by_duration.
+    duration = modal_duration(rows)
+    rows, off_duration = split_by_duration(rows, duration)
+    off_duration_runs = sorted({str(r.get("run")) for r in off_duration})
+    if off_duration_runs:
+        print(f"excluding {len(off_duration_runs)} run(s) whose duration is not "
+              f"{duration:g}s: {', '.join(off_duration_runs[:4])}"
+              + (" ..." if len(off_duration_runs) > 4 else ""))
+
     write_per_run_csv(rows, os.path.join(args.out, "per_run_metrics.csv"))
 
     md_parts: List[str] = []
@@ -404,6 +445,8 @@ def main(argv=None) -> int:
         "runs_found": len(all_runs),
         "runs_analysed": len(runs),
         "runs_excluded_incomplete": excluded,
+        "comparable_duration_s": duration,
+        "runs_excluded_off_duration": off_duration_runs,
         "runs_per_cell": counts,
     }
     with open(os.path.join(args.out, "aggregate_provenance.json"), "w",

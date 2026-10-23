@@ -287,3 +287,41 @@ def test_discover_runs_excludes_diagnostics_by_default(tmp_path):
 
     everything = discover_runs(str(tmp_path), include_diagnostics=True)
     assert len(everything) == 3
+
+
+# --------------------------------------------------- duration comparability
+def test_modal_duration_picks_the_dominant_length():
+    from analysis.aggregate import modal_duration
+    rows = [{"duration_s": 90}] * 5 + [{"duration_s": 30}]
+    assert modal_duration(rows) == 90.0
+    assert modal_duration([]) is None
+    assert modal_duration([{"duration_s": None}]) is None
+
+
+def test_off_duration_runs_are_separated_not_averaged_in():
+    """A 30s dashboard run must not be averaged with the 90s matrix.
+
+    Cumulative metrics (table misses, controller messages) scale with run
+    length, and the RL variants get proportionally more or fewer learning
+    steps, so mixing lengths compares different experiments.
+    """
+    from analysis.aggregate import modal_duration, split_by_duration
+    rows = [
+        {"run": "matrix-1", "duration_s": 90},
+        {"run": "matrix-2", "duration_s": 90},
+        {"run": "matrix-3", "duration_s": 90},
+        {"run": "adhoc-ui", "duration_s": 30},
+        {"run": "demo", "duration_s": 240},
+    ]
+    duration = modal_duration(rows)
+    keep, drop = split_by_duration(rows, duration)
+    assert duration == 90.0
+    assert [r["run"] for r in keep] == ["matrix-1", "matrix-2", "matrix-3"]
+    assert {r["run"] for r in drop} == {"adhoc-ui", "demo"}
+
+
+def test_split_by_duration_is_a_noop_without_a_modal_duration():
+    from analysis.aggregate import split_by_duration
+    rows = [{"run": "a"}, {"run": "b"}]
+    keep, drop = split_by_duration(rows, None)
+    assert keep == rows and drop == []

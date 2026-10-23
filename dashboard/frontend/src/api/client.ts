@@ -108,8 +108,33 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  experimentStop: () =>
-    request<Record<string, unknown>>("/api/experiments/stop", { method: "POST" }),
+  experimentStop: (experimentId?: string) =>
+    request<Record<string, unknown>>("/api/experiments/stop", {
+      method: "POST",
+      // Addressed by id so the browser can never stop "whatever is running".
+      body: JSON.stringify(experimentId ? { experiment_id: experimentId } : {}),
+    }),
+  experimentInjectLink: (body: {
+    experiment_id: string;
+    action: "link_down" | "link_up";
+    link: string;
+  }) =>
+    request<{ queued?: Record<string, unknown>; note?: string }>(
+      "/api/experiments/inject-link",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  experimentLinks: () =>
+    request<{
+      links: {
+        id: string;
+        endpoints: string[];
+        bandwidth_mbit: number;
+        delay_ms: number;
+        on_paths: string[];
+      }[];
+      actions: string[];
+      note: string;
+    }>("/api/experiments/links"),
   experimentCommand: (params: {
     variant: string;
     workload: string;

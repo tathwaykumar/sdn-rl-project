@@ -49,3 +49,9 @@ dashboard/frontend/dist/
 dashboard/frontend/.vite/
 results/dashboard_logs/
 results/dashboard_api.log
+
+results/launcher_logs/
+results/launcher_daemon.log
+results/webdemo.log
+results/diagnostics_run.log
+results/matrix_run.log

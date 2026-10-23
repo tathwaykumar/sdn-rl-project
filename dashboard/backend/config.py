@@ -97,6 +97,11 @@ class Capabilities:
     is_root: bool = False
     reason_cannot_start: Optional[str] = None
     reason_cannot_query: Optional[str] = None
+    #: "launcher" | "root_api" | "none" -- how a start request would be served.
+    start_mechanism: str = "none"
+    launcher_available: bool = False
+    launcher_detail: str = ""
+    launcher_socket: str = ""
     project_root: str = PROJECT_ROOT
     runs_dir: str = RUNS_DIR
     notes: List[str] = field(default_factory=list)
@@ -107,18 +112,43 @@ def probe_capabilities() -> Capabilities:
     caps.is_root = (os.geteuid() == 0)
     caps.can_read_runs = os.path.isdir(RUNS_DIR) and os.access(RUNS_DIR, os.R_OK)
 
-    # Starting an experiment means starting Mininet, which requires root.
-    # The API deliberately does not acquire privilege for itself: a web service
+    # Starting an experiment means starting Mininet, which requires root. The
+    # API deliberately does not acquire privilege for itself: a web service
     # that can become root is a much larger attack surface than this project
-    # needs. When unprivileged, the UI shows the exact command to run instead.
-    if caps.is_root:
+    # needs. Instead it asks a small privileged daemon over a Unix socket.
+    #
+    # Three cases, in order of preference:
+    #   1. The launcher daemon is reachable -> start experiments through it.
+    #   2. The API is itself root -> start them directly (works, but means a
+    #      root-capable web service, so it is not the recommended posture).
+    #   3. Neither -> refuse, and tell the user exactly how to enable it.
+    from .launcher_link import launcher_state  # local import avoids a cycle
+
+    launcher = launcher_state()
+    caps.launcher_available = launcher["available"]
+    caps.launcher_detail = launcher["detail"]
+    caps.launcher_socket = launcher["socket_path"]
+
+    if launcher["available"]:
         caps.can_start_experiments = True
+        caps.start_mechanism = "launcher"
+    elif caps.is_root:
+        caps.can_start_experiments = True
+        caps.start_mechanism = "root_api"
+        caps.notes.append(
+            "This API is running as root, so it can start experiments "
+            "directly. Running the privileged launcher daemon instead and "
+            "keeping the API unprivileged is the recommended setup."
+        )
     else:
         caps.can_start_experiments = False
+        caps.start_mechanism = "none"
         caps.reason_cannot_start = (
-            "The API is running unprivileged. Mininet requires root, so "
-            "experiments cannot be launched from the browser. Start the API "
-            "as root to enable this, or run the printed command in a terminal."
+            "Experiments need root because Mininet does, and this API is "
+            "deliberately unprivileged. Start the privileged launcher daemon "
+            "to enable browser-based launching:\n"
+            "    sudo python3 -m dashboard.launcher.daemon\n"
+            f"({launcher['detail']})"
         )
 
     # Direct ovs-ofctl queries need root too, and would add OpenFlow messages

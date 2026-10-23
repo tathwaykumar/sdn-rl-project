@@ -54,6 +54,26 @@ Verified with FastAPI 0.118.0, uvicorn 0.38.0, Node 22.22.1, npm 9.2.0.
 
 Then open **http://127.0.0.1:5173**.
 
+### To start experiments from the browser
+
+The dashboard is read-only until you also run the privileged launcher, in a
+second terminal:
+
+```bash
+sudo python3 -m dashboard.launcher.daemon
+```
+
+With it running, the Experiments page can start, stop and inject link failures
+into real Mininet experiments. The API itself stays unprivileged throughout —
+it talks to the daemon over a Unix socket whose entire vocabulary is five
+operations, and the daemon builds the runner command itself from a fixed
+allowlist. No sudoers changes are made.
+
+Without it, everything else still works and the Experiments page shows the
+exact command to run in a terminal instead.
+
+Full security model, systemd unit and limitations: **`dashboard/launcher/README.md`**.
+
 Or start the two halves separately:
 
 ```bash
@@ -131,7 +151,12 @@ and data age. Instantaneous readings and interval aggregates are labelled
 differently. A panel lists what is *not* available live and why.
 
 **Experiments** — start a run with a validated variant/workload/seed/duration,
-view status and runner output, stop a run the dashboard started.
+view status and runner output, stop a run the dashboard started (addressed by
+experiment id, so a stale tab cannot stop something it is not looking at), and
+— while a dashboard-started run is live — inject a link failure or recovery on
+any of the five core links. The injection is applied by the runner to the real
+Mininet session and observed by the controller over OpenFlow; the topology
+view only redraws once the switches confirm it.
 
 **A/B/C Comparison** — medians with IQR across seeds, relative change against a
 baseline, and a verdict that only claims a difference when the 95% confidence
@@ -145,14 +170,24 @@ and links to the generated figures and report.
 
 ## 6. Security and privilege separation
 
-The API **runs unprivileged by default and does not try to become root.**
+The API **runs unprivileged and does not try to become root.** Reading
+telemetry needs no privileges at all.
 
-* Reading telemetry needs no privileges at all.
-* Mininet needs root. When the API is unprivileged it refuses to start
-  experiments and shows the exact `sudo` command to run in a terminal instead.
-* If you *do* start the API as root, it can launch experiments. That is a
-  root-capable web service, so it binds to loopback only and CORS is restricted
-  to the local dev-server origins. Do not expose it.
+Mininet does need root, so experiment control is served one of three ways,
+reported by `/api/capabilities` as `start_mechanism`:
+
+| `start_mechanism` | What it means |
+|---|---|
+| `launcher` | **Recommended.** A small root daemon owns the privileged work; the API is a client over a Unix socket. |
+| `root_api` | The API itself was started as root. It works, but a root-capable web service is a larger attack surface than necessary. |
+| `none` | Neither. Experiments cannot be started from the browser; the UI shows the exact terminal command instead. |
+
+The launcher's trust boundary is deliberately tiny: five operations, all
+parameters drawn from fixed allowlists, the command line assembled by the
+daemon from its own constants, `shell=False` everywhere, peer credentials
+checked with `SO_PEERCRED` on top of `0660` socket permissions, stop addressed
+by experiment id rather than pid or pattern, and no sudoers changes anywhere.
+See `dashboard/launcher/README.md` for the full model and threat notes.
 
 Other deliberate limits:
 
@@ -215,8 +250,14 @@ connect/reconnect/backoff, fallback to polling, and API error propagation.
   measurement; the iperf3 figure appears in the comparison views.
 * **Recovery time is not a live metric.** It is defined relative to a link
   failure, so it only exists for `failure` runs, after the failure.
-* **Link failure cannot be triggered from the UI.** The runner owns the Mininet
-  session, so a link can only be cut from inside it. Use the `failure` workload.
+* **Link failure from the UI needs a dashboard-started experiment.** The runner
+  owns the Mininet session, so injection is only offered while an experiment
+  this dashboard started is running — that is the only case where the runner
+  can safely coordinate the change. The `failure` workload also schedules its
+  own cut of `s1-s2` partway through any run.
+* **Experiments cannot be started from the browser unless the privileged
+  launcher is running.** Without it the Experiments page shows the exact
+  terminal command instead of a button that would fail.
 * **No direct `ovs-ofctl` query button.** It would need root *and* would add
   OpenFlow traffic to a system whose controller load is a measured result. The
   capability is reported as unavailable with that reason rather than hidden.

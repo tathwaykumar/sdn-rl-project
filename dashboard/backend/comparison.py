@@ -30,7 +30,10 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from analysis import stats  # noqa: E402
-from analysis.aggregate import METRICS, VARIANT_ORDER, WORKLOAD_ORDER, run_metrics  # noqa: E402
+from analysis.aggregate import (  # noqa: E402
+    METRICS, VARIANT_ORDER, WORKLOAD_ORDER, modal_duration, run_metrics,
+    split_by_duration,
+)
 from analysis.parsers import is_diagnostic_run, load_run  # noqa: E402
 from analysis.report import LOWER_IS_BETTER  # noqa: E402
 
@@ -161,6 +164,14 @@ def compare(runs_dir: str = RUNS_DIR, window: str = "full",
     all_rows = collect_run_metrics(runs_dir, window, include_incomplete=True)
     analysable = [r for r in all_rows if r.get("complete")]
     excluded = [r for r in all_rows if not r.get("complete")]
+
+    # Runs of different lengths are not comparable: cumulative metrics scale
+    # with duration and the RL variants get more or fewer learning steps. Keep
+    # the duration most runs share and report the rest rather than averaging
+    # a 30-second dashboard run in with the 90-second matrix.
+    duration = modal_duration(analysable)
+    analysable, off_duration = split_by_duration(analysable, duration)
+
     rows = _filter(analysable, workloads, variants, seeds)
 
     present_workloads = [w for w in WORKLOAD_ORDER
@@ -215,6 +226,13 @@ def compare(runs_dir: str = RUNS_DIR, window: str = "full",
         "coverage": _coverage(rows),
         "runs_analysed": len(rows),
         "runs_excluded_incomplete": len(excluded),
+        "comparable_duration_s": duration,
+        "runs_excluded_off_duration": [
+            {"run_id": r.get("run_id"), "variant": r.get("variant"),
+             "workload": r.get("workload"), "seed": r.get("seed"),
+             "duration_s": r.get("duration_s")}
+            for r in off_duration
+        ],
         "excluded_runs": [
             {"run_id": r.get("run_id"), "variant": r.get("variant"),
              "workload": r.get("workload"), "seed": r.get("seed")}
