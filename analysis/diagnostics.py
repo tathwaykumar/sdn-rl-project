@@ -100,7 +100,9 @@ def main(argv=None) -> int:
     args = p.parse_args(argv)
 
     grouped: Dict[str, List] = {tag: [] for tag in CONDITION_TAGS}
-    for run in discover_runs(args.runs):
+    # These are the only runs this module cares about, so ask for them
+    # explicitly -- discover_runs() filters them out by default.
+    for run in discover_runs(args.runs, include_diagnostics=True):
         tag = condition_of(run.path)
         if tag and run.complete:
             grouped[tag].append(run)

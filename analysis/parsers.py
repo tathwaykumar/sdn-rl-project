@@ -367,16 +367,41 @@ def load_run(path: str) -> Optional[Run]:
     return Run(path=path, config=config, manifest=manifest)
 
 
-def discover_runs(runs_root: str) -> List[Run]:
+#: Marker the runner puts in the directory name of a control-experiment run
+#: (``--tag diag-frozen`` and friends).
+DIAGNOSTIC_TAG = "-diag-"
+
+
+def is_diagnostic_run(run_id: str) -> bool:
+    """Is this a control-experiment run rather than a normal measurement?
+
+    Control runs deliberately cripple or scramble the agent (a frozen all-zero
+    table, a permuted action mapping). They are complete, valid runs and they
+    answer their own question, but they are *not* samples of the variant's
+    normal behaviour. Mixing them into the A/B/C comparison silently corrupts
+    it: when this was first run, three frozen runs pulled variant C's measured
+    heavy-workload throughput from 13.68 down to 9.32 Mbit/s and inflated its
+    sample count from 5 to 14.
+    """
+    return DIAGNOSTIC_TAG in run_id
+
+
+def discover_runs(runs_root: str, include_diagnostics: bool = False) -> List[Run]:
     """Load every run directory, including incomplete ones.
 
     Incomplete runs are returned too, so the analysis can *report* how many
     were excluded instead of quietly analysing whatever happened to work.
+
+    Control-experiment runs are excluded by default; pass
+    ``include_diagnostics=True`` to get them (``analysis/diagnostics.py``
+    does, because they are exactly what it analyses).
     """
     out: List[Run] = []
     for entry in sorted(os.listdir(runs_root)):
         full = os.path.join(runs_root, entry)
         if not os.path.isdir(full):
+            continue
+        if not include_diagnostics and is_diagnostic_run(entry):
             continue
         run = load_run(full)
         if run is not None:

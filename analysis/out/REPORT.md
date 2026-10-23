@@ -45,8 +45,8 @@ Path A is shorter but narrower, so the better path depends on load. A fixed poli
 | `iperf3_version` | iperf 3.20 (cJSON 1.7.15) |
 | `git_commit` | fatal: detected dubious ownership in repository at '/home/tathwaykumar/sdn-rl-project' |
 
-- Run directories found: **69**
-- Runs analysed (manifest complete): **69**
+- Run directories found: **60**
+- Runs analysed (manifest complete): **60**
 - Runs excluded as incomplete: **0**
 
 Runs per cell:
@@ -54,7 +54,7 @@ Runs per cell:
 | Workload | Variant A | Variant B | Variant C |
 |---|---|---|---|
 | `light` | 5 | 5 | 5 |
-| `heavy` | 5 | 5 | 14 |
+| `heavy` | 5 | 5 | 5 |
 | `churn` | 5 | 5 | 5 |
 | `failure` | 5 | 5 | 5 |
 
@@ -117,17 +117,17 @@ Cells are the **median across seeds** with the interquartile range in brackets, 
 
 | Metric | A | B | C |
 |---|---|---|---|
-| Throughput (OF counters) (Mbit/s) | 4.67 [IQR 0.01] (n=5) | 13.68 [IQR 4.47] (n=5) | 9.32 [IQR 4.53] (n=14) |
-| Throughput (iperf3) (Mbit/s) | 4.81 [IQR 0.02] (n=5) | 14.18 [IQR 4.63] (n=5) | 9.58 [IQR 4.65] (n=14) |
-| Latency, median RTT | 317.00 [IQR 18.00] (n=5) | 210.00 [IQR 100.50] (n=5) | 187.25 [IQR 131.25] (n=14) |
-| Latency, p95 RTT | 437.45 [IQR 2.70] (n=5) | 240.00 [IQR 196.30] (n=5) | 233.00 [IQR 205.00] (n=14) |
-| Packet loss (ping) (%) | 96.29 [IQR 0.22] (n=5) | 64.71 [IQR 60.57] (n=5) | 34.97 [IQR 69.22] (n=14) |
-| Packet loss (OF counters) (%) | 0.000 [IQR 0.000] (n=5) | 0.000 [IQR 0.000] (n=5) | 0.000 [IQR 0.000] (n=14) |
-| Max link utilisation (%) | 91.3 [IQR 0.2] (n=5) | 90.9 [IQR 0.6] (n=5) | 91.2 [IQR 0.4] (n=14) |
-| Flow-table occupancy (rules) | 19.8 [IQR 0.2] (n=5) | 24.0 [IQR 3.3] (n=5) | 22.9 [IQR 5.0] (n=14) |
-| Rule-hit ratio (%) | 99.89 [IQR 0.26] (n=5) | 99.92 [IQR 0.28] (n=5) | 99.91 [IQR 0.26] (n=14) |
-| Table misses (total) | 15 [IQR 1] (n=5) | 15 [IQR 1] (n=5) | 15 [IQR 1] (n=14) |
-| Controller messages (reactive) | 82 [IQR 1] (n=5) | 88 [IQR 5] (n=5) | 93 [IQR 8] (n=14) |
+| Throughput (OF counters) (Mbit/s) | 4.67 [IQR 0.01] (n=5) | 13.68 [IQR 4.47] (n=5) | 13.68 [IQR 4.53] (n=5) |
+| Throughput (iperf3) (Mbit/s) | 4.81 [IQR 0.02] (n=5) | 14.18 [IQR 4.63] (n=5) | 14.19 [IQR 4.64] (n=5) |
+| Latency, median RTT | 317.00 [IQR 18.00] (n=5) | 210.00 [IQR 100.50] (n=5) | 173.00 [IQR 24.00] (n=5) |
+| Latency, p95 RTT | 437.45 [IQR 2.70] (n=5) | 240.00 [IQR 196.30] (n=5) | 232.00 [IQR 1.00] (n=5) |
+| Packet loss (ping) (%) | 96.29 [IQR 0.22] (n=5) | 64.71 [IQR 60.57] (n=5) | 27.23 [IQR 8.50] (n=5) |
+| Packet loss (OF counters) (%) | 0.000 [IQR 0.000] (n=5) | 0.000 [IQR 0.000] (n=5) | 0.000 [IQR 0.000] (n=5) |
+| Max link utilisation (%) | 91.3 [IQR 0.2] (n=5) | 90.9 [IQR 0.6] (n=5) | 91.0 [IQR 0.4] (n=5) |
+| Flow-table occupancy (rules) | 19.8 [IQR 0.2] (n=5) | 24.0 [IQR 3.3] (n=5) | 22.9 [IQR 2.6] (n=5) |
+| Rule-hit ratio (%) | 99.89 [IQR 0.26] (n=5) | 99.92 [IQR 0.28] (n=5) | 99.92 [IQR 0.21] (n=5) |
+| Table misses (total) | 15 [IQR 1] (n=5) | 15 [IQR 1] (n=5) | 15 [IQR 1] (n=5) |
+| Controller messages (reactive) | 82 [IQR 1] (n=5) | 88 [IQR 5] (n=5) | 93 [IQR 2] (n=5) |
 
 ### Workload `churn`
 
@@ -188,17 +188,17 @@ Cells are the **median across seeds** with the interquartile range in brackets, 
 
 | Metric | A | B | C |
 |---|---|---|---|
-| Throughput (OF counters) (Mbit/s) | 4.74 [IQR 0.05] (n=5) | 13.61 [IQR 4.65] (n=5) | 9.41 [IQR 4.74] (n=14) |
-| Throughput (iperf3) (Mbit/s) | 4.81 [IQR 0.02] (n=5) | 14.18 [IQR 4.63] (n=5) | 9.58 [IQR 4.65] (n=14) |
-| Latency, median RTT | 304.00 [IQR 16.50] (n=5) | 212.00 [IQR 94.00] (n=5) | 200.00 [IQR 120.50] (n=14) |
-| Latency, p95 RTT | 436.00 [IQR 13.95] (n=5) | 243.00 [IQR 183.80] (n=5) | 234.82 [IQR 207.76] (n=14) |
-| Packet loss (ping) (%) | 96.29 [IQR 0.22] (n=5) | 64.71 [IQR 60.57] (n=5) | 34.97 [IQR 69.22] (n=14) |
-| Packet loss (OF counters) (%) | 0.000 [IQR 0.000] (n=5) | 0.000 [IQR 0.000] (n=5) | 0.000 [IQR 0.000] (n=14) |
-| Max link utilisation (%) | 92.8 [IQR 1.0] (n=5) | 91.7 [IQR 2.1] (n=5) | 92.2 [IQR 1.3] (n=14) |
-| Flow-table occupancy (rules) | 19.0 [IQR 0.2] (n=5) | 23.1 [IQR 2.8] (n=5) | 23.1 [IQR 4.2] (n=14) |
-| Rule-hit ratio (%) | 99.99 [IQR 0.00] (n=5) | 100.00 [IQR 0.00] (n=5) | 100.00 [IQR 0.00] (n=14) |
-| Table misses (total) | 5 [IQR 1] (n=5) | 4 [IQR 0] (n=5) | 4 [IQR 1] (n=14) |
-| Controller messages (reactive) | 42 [IQR 1] (n=5) | 43 [IQR 3] (n=5) | 45 [IQR 3] (n=14) |
+| Throughput (OF counters) (Mbit/s) | 4.74 [IQR 0.05] (n=5) | 13.61 [IQR 4.65] (n=5) | 13.86 [IQR 4.67] (n=5) |
+| Throughput (iperf3) (Mbit/s) | 4.81 [IQR 0.02] (n=5) | 14.18 [IQR 4.63] (n=5) | 14.19 [IQR 4.64] (n=5) |
+| Latency, median RTT | 304.00 [IQR 16.50] (n=5) | 212.00 [IQR 94.00] (n=5) | 185.50 [IQR 17.00] (n=5) |
+| Latency, p95 RTT | 436.00 [IQR 13.95] (n=5) | 243.00 [IQR 183.80] (n=5) | 233.70 [IQR 2.80] (n=5) |
+| Packet loss (ping) (%) | 96.29 [IQR 0.22] (n=5) | 64.71 [IQR 60.57] (n=5) | 27.23 [IQR 8.50] (n=5) |
+| Packet loss (OF counters) (%) | 0.000 [IQR 0.000] (n=5) | 0.000 [IQR 0.000] (n=5) | 0.000 [IQR 0.000] (n=5) |
+| Max link utilisation (%) | 92.8 [IQR 1.0] (n=5) | 91.7 [IQR 2.1] (n=5) | 92.1 [IQR 1.9] (n=5) |
+| Flow-table occupancy (rules) | 19.0 [IQR 0.2] (n=5) | 23.1 [IQR 2.8] (n=5) | 23.2 [IQR 2.5] (n=5) |
+| Rule-hit ratio (%) | 99.99 [IQR 0.00] (n=5) | 100.00 [IQR 0.00] (n=5) | 100.00 [IQR 0.00] (n=5) |
+| Table misses (total) | 5 [IQR 1] (n=5) | 4 [IQR 0] (n=5) | 5 [IQR 0] (n=5) |
+| Controller messages (reactive) | 42 [IQR 1] (n=5) | 43 [IQR 3] (n=5) | 45 [IQR 5] (n=5) |
 
 ### Workload `churn`
 
@@ -262,7 +262,7 @@ Each comparison below is against variant A on the same workload, using the secon
 
 ### `heavy`
 
-> **Read latency together with loss here.** Probe loss differs substantially between variants (A 96%, B 65%, C 35%), so the RTT medians below are computed over different populations of surviving probes. A variant that drops more traffic can show a lower median RTT without being better: the packets that would have been slow were never delivered.
+> **Read latency together with loss here.** Probe loss differs substantially between variants (A 96%, B 65%, C 27%), so the RTT medians below are computed over different populations of surviving probes. A variant that drops more traffic can show a lower median RTT without being better: the packets that would have been slow were never delivered.
 
 **Variant B vs A**
 
@@ -273,17 +273,17 @@ Each comparison below is against variant A on the same workload, using the secon
 
 **Variant C vs A**
 
-- Throughput (OF counters): 98.6% higher -- better; 95% intervals do not overlap
-- Latency, median RTT: 34.2% lower (better direction), but the 95% intervals overlap -- not distinguishable at n=5
-- Flow-table occupancy (rules): 21.8% higher -- worse; 95% intervals do not overlap
-- Controller messages (reactive): 7.1% higher -- worse; 95% intervals do not overlap
+- Throughput (OF counters): 192.5% higher -- better; 95% intervals do not overlap
+- Latency, median RTT: 39.0% lower (better direction), but the 95% intervals overlap -- not distinguishable at n=5
+- Flow-table occupancy (rules): 22.5% higher -- worse; 95% intervals do not overlap
+- Controller messages (reactive): 7.1% higher (worse direction), but the 95% intervals overlap -- not distinguishable at n=5
 
 **Variant C vs B** (isolates flow-timeout control)
 
-- Throughput (OF counters): 30.9% lower (worse direction), but the 95% intervals overlap -- not distinguishable at n=5
-- Latency, median RTT: 5.7% lower (better direction), but the 95% intervals overlap -- not distinguishable at n=5
-- Flow-table occupancy (rules): 0.1% higher (worse direction), but the 95% intervals overlap -- not distinguishable at n=5
-- Controller messages (reactive): 4.6% higher (worse direction), but the 95% intervals overlap -- not distinguishable at n=5
+- Throughput (OF counters): 1.8% higher (better direction), but the 95% intervals overlap -- not distinguishable at n=5
+- Latency, median RTT: 12.5% lower (better direction), but the 95% intervals overlap -- not distinguishable at n=5
+- Flow-table occupancy (rules): 0.6% higher (worse direction), but the 95% intervals overlap -- not distinguishable at n=5
+- Controller messages (reactive): 4.7% higher (worse direction), but the 95% intervals overlap -- not distinguishable at n=5
 
 ### `churn`
 
@@ -342,7 +342,7 @@ Each comparison below is against variant A on the same workload, using the secon
 |---|---|---|---|---|---|---|
 | A | 98 | -0.040 | +0.000 | n/a | n/a | n/a |
 | B | 98 | 0.016 | +0.001 | 11.8% | 5 | 2 |
-| C | 97 | 0.114 | -0.000 | 19.4% | 4 | 3 |
+| C | 98 | 0.060 | -0.000 | 19.4% | 6 | 4 |
 
 Variant A has no agent; the controller computes the same reward for it, so its row is the non-learning reference rather than evidence of learning. A reward delta near zero for A is therefore expected and is a useful check that the reward itself is not simply drifting upward over a run for reasons unrelated to the policy.
 

@@ -31,7 +31,7 @@ if PROJECT_ROOT not in sys.path:
 
 from analysis import stats  # noqa: E402
 from analysis.aggregate import METRICS, VARIANT_ORDER, WORKLOAD_ORDER, run_metrics  # noqa: E402
-from analysis.parsers import load_run  # noqa: E402
+from analysis.parsers import is_diagnostic_run, load_run  # noqa: E402
 from analysis.report import LOWER_IS_BETTER  # noqa: E402
 
 #: Metric key -> presentation metadata for the UI.
@@ -96,6 +96,11 @@ def collect_run_metrics(runs_dir: str = RUNS_DIR, window: str = "full",
     for entry in entries:
         path = os.path.join(runs_dir, entry)
         if not os.path.isdir(path):
+            continue
+        # Control-experiment runs are valid runs but deliberately crippled or
+        # scrambled, so they are not samples of a variant's normal behaviour
+        # and must not enter the A/B/C comparison.
+        if is_diagnostic_run(entry):
             continue
         run = load_run(path)
         if run is None:

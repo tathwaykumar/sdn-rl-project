@@ -247,3 +247,43 @@ def test_to_float_keeps_missing_distinct_from_zero():
     assert to_float("abc") is None
     assert to_float("0") == 0.0
     assert to_float("1.5") == pytest.approx(1.5)
+
+
+# ------------------------------------------------- diagnostic-run exclusion
+def test_diagnostic_runs_are_identified():
+    """Control runs are tagged in their directory name by the runner."""
+    from analysis.parsers import is_diagnostic_run
+    assert is_diagnostic_run("20261023-100228-C-heavy-seed1-diag-frozen")
+    assert is_diagnostic_run("20261023-100411-C-heavy-seed1-diag-shuffled")
+    assert not is_diagnostic_run("20261023-081048-C-heavy-seed1")
+    assert not is_diagnostic_run("20261023-093239-C-heavy-seed5")
+
+
+def test_discover_runs_excludes_diagnostics_by_default(tmp_path):
+    """Frozen and shuffled runs must never enter the A/B/C comparison.
+
+    They are complete, valid runs, but the agent in them is deliberately
+    crippled or scrambled, so they are not samples of a variant's normal
+    behaviour. When this was first run, three frozen runs pulled variant C's
+    measured heavy-workload throughput from 13.68 down to 9.32 Mbit/s and
+    inflated its sample count from 5 to 14.
+    """
+    import json as _json
+    from analysis.parsers import discover_runs
+
+    for name in ("20261023-081048-C-heavy-seed1",
+                 "20261023-100228-C-heavy-seed1-diag-frozen",
+                 "20261023-100411-C-heavy-seed1-diag-shuffled"):
+        run_dir = tmp_path / name
+        (run_dir / "raw").mkdir(parents=True)
+        (run_dir / "config.json").write_text(
+            _json.dumps({"variant": "C", "workload": "heavy", "seed": 1})
+        )
+        (run_dir / "manifest.json").write_text(_json.dumps({"complete": True}))
+
+    normal = discover_runs(str(tmp_path))
+    assert len(normal) == 1
+    assert os.path.basename(normal[0].path).endswith("seed1")
+
+    everything = discover_runs(str(tmp_path), include_diagnostics=True)
+    assert len(everything) == 3
