@@ -17,7 +17,8 @@ import { api } from "../api/client";
 import { useAsync } from "../hooks/useLive";
 import type { LatencyPayload, LiveMetrics, LiveSnapshot, MetricSeries } from "../api/types";
 import {
-  Card, Empty, ErrorBox, MetricCard, Skeleton, SourceBadge,
+  Card, ChartLegend, Empty, ErrorBox, MetricCard, Skeleton, SourceBadge,
+  tooltipLabelStyle, tooltipStyle,
   fmtNumber, fmtPercent,
 } from "../components/ui";
 
@@ -303,15 +304,20 @@ function Chart({
             />
             <YAxis
               tick={{ fontSize: 9, fill: "var(--text-3)" }}
-              axisLine={false} tickLine={false} width={44}
+              axisLine={false} tickLine={false} width={48}
+              label={
+                unit
+                  ? {
+                      value: unit, angle: -90, position: "insideLeft",
+                      offset: 22, fontSize: 9, fill: "var(--text-4)",
+                    }
+                  : undefined
+              }
             />
             <Tooltip
-              contentStyle={{
-                background: "var(--surface-2)",
-                border: "1px solid var(--border-2)",
-                borderRadius: 8, fontSize: 11,
-              }}
-              labelStyle={{ color: "var(--text-3)" }}
+              contentStyle={tooltipStyle}
+              labelStyle={tooltipLabelStyle}
+              cursor={{ stroke: "var(--border-3)", strokeDasharray: "3 3" }}
               formatter={(value: number, name: string) => [
                 `${fmtNumber(value, 2)}${unit ? ` ${unit}` : ""}`, name,
               ]}
@@ -325,16 +331,13 @@ function Chart({
           </LineChart>
         </ResponsiveContainer>
       </div>
+      {/* Two or more series always get a key; one series is named by the
+          title, so a legend there would only repeat it. */}
       {lines.length > 1 && (
-        <div className="flex gap-3 mt-2">
-          {lines.map((l) => (
-            <span key={l.key} className="flex items-center gap-1.5 text-[10px]"
-                  style={{ color: "var(--text-2)" }}>
-              <span className="w-3 h-0.5 rounded" style={{ background: l.color }} />
-              {l.label}
-            </span>
-          ))}
-        </div>
+        <ChartLegend
+          items={lines.map((l) => ({ label: l.label, color: l.color }))}
+          note={unit ? `values in ${unit}` : undefined}
+        />
       )}
     </Card>
   );

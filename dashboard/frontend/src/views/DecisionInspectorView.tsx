@@ -21,7 +21,8 @@ import type {
   Decision, LiveSnapshot, MetricSeries, RewardExplain,
 } from "../api/types";
 import {
-  Card, Details, Empty, ErrorBox, Pill, Skeleton, SourceBadge, cx,
+  Card, ChartLegend, Details, Empty, ErrorBox, Pill, Skeleton, SourceBadge, cx,
+  tooltipStyle,
   fmtNumber, fmtTime,
 } from "../components/ui";
 import { DecisionJourney } from "./DecisionJourney";
@@ -336,10 +337,7 @@ function DecisionTimeline({
               />
             )}
             <Tooltip
-              contentStyle={{
-                background: "var(--glass-strong)", border: "1px solid var(--border-2)",
-                borderRadius: 8, fontSize: 11,
-              }}
+              contentStyle={tooltipStyle}
               labelFormatter={(v: number) => `${fmtNumber(v, 1)} s into the run`}
               formatter={(value: number, name: string) => [
                 fmtNumber(value, name === "throughput" ? 2 : 1),
@@ -371,42 +369,28 @@ function DecisionTimeline({
         </ResponsiveContainer>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 t-small">
-        {paths.map((p) => (
-          <span key={p} className="inline-flex items-center gap-1.5">
-            <span
-              className="w-3.5 h-2.5 rounded-sm shrink-0"
-              style={{
-                background: PATH_COLOR[p] ?? "var(--idle)",
-                opacity: 0.35,
-              }}
-              aria-hidden="true"
-            />
-            <span style={{ color: "var(--text-3)" }}>path {p} selected</span>
-          </span>
-        ))}
-        <span className="inline-flex items-center gap-1.5">
-          <span className="w-5 h-0.5 shrink-0" style={{ background: "var(--accent)" }}
-                aria-hidden="true" />
-          <span style={{ color: "var(--text-3)" }}>throughput, left axis</span>
-        </span>
-        {hasUtil && (
-          <span className="inline-flex items-center gap-1.5">
-            <span
-              className="w-5 h-0.5 shrink-0"
-              style={{
-                background:
-                  "repeating-linear-gradient(90deg, var(--warn) 0 4px, transparent 4px 7px)",
-              }}
-              aria-hidden="true"
-            />
-            <span style={{ color: "var(--text-3)" }}>max link utilisation, right axis</span>
-          </span>
-        )}
-        <span className="t-micro ml-auto" style={{ color: "var(--text-4)" }}>
-          click anywhere to inspect the nearest decision
-        </span>
-      </div>
+      <ChartLegend
+        items={[
+          ...paths.map((p) => ({
+            label: `path ${p} selected`,
+            color: PATH_COLOR[p] ?? "var(--idle)",
+            shape: "band" as const,
+            hint: "The agent's choice for that interval — an intention, not confirmed forwarding.",
+          })),
+          {
+            label: "throughput, left axis", color: "var(--accent)", shape: "area" as const,
+            hint: "Delivered to hosts, from edge-switch egress counters (Mbit/s).",
+          },
+          ...(hasUtil
+            ? [{
+                label: "max link utilisation, right axis",
+                color: "var(--warn)", shape: "dashed" as const,
+                hint: "The busiest link's utilisation at that moment (%).",
+              }]
+            : []),
+        ]}
+        note="click anywhere to inspect the nearest decision"
+      />
 
       <Details summary="What this shows, and what it cannot">
         <ul className="space-y-1.5 leading-relaxed">

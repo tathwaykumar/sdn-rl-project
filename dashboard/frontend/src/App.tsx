@@ -62,7 +62,7 @@ export default function App() {
         <TopologyView snapshot={liveSnapshot} runId={runId} />
       )}
       {page === "metrics" && (
-        <div className="space-y-5">
+        <div className="space-y-4">
           <MetricsView runId={runId} snapshot={liveSnapshot} />
           <FlowTablesView runId={runId} />
         </div>

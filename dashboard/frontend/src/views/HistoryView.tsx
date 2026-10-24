@@ -64,7 +64,7 @@ export function HistoryView({
   if (error) return <Card title="Experiments"><ErrorBox message={error} onRetry={refresh} /></Card>;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {selectedRunId && (
         <div
           className="panel px-4 py-3 flex flex-wrap items-center justify-between gap-3"
@@ -87,7 +87,7 @@ export function HistoryView({
         <SectionTitle hint="Every run directory on disk, including interrupted ones">
           Summary
         </SectionTitle>
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
           <SummaryTile label="Total runs" value={stats.total} />
           <SummaryTile label="Primary matrix" value={stats.matrix}
                        hint="untagged controlled sweep" tone="ok" />

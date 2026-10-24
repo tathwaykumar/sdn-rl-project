@@ -24,7 +24,7 @@ import type {
   Decision, DecodedState, QValueRow, RewardStep, StepVerification,
 } from "../api/types";
 import {
-  Card, Details, Pill, StatusDot, fmtNumber,
+  Card, ChartLegend, Details, Pill, StatusDot, fmtNumber, tooltipStyle,
 } from "../components/ui";
 
 const STAGES = [
@@ -253,8 +253,7 @@ function StageAction({
               <YAxis type="category" dataKey="label" width={88}
                      tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
               <Tooltip
-                contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border-2)",
-                                borderRadius: 8, fontSize: 11 }}
+                contentStyle={tooltipStyle}
                 formatter={(v: number) => [fmtNumber(v, 4), "Q-value"]}
               />
               <Bar dataKey="value" radius={[0, 4, 4, 0]} isAnimationActive={false}>
@@ -275,11 +274,24 @@ function StageAction({
         </p>
       )}
       {rows.length > 0 && (
-        <p className="t-micro mt-1.5" style={{ color: "var(--text-4)" }}>
-          <span style={{ color: "var(--rl)" }}>■</span> chosen ·{" "}
-          <span style={{ color: "var(--accent)" }}>■</span> greedy (if different) ·{" "}
-          <span style={{ color: "var(--text-4)" }}>■</span> other allowed actions
-        </p>
+        <ChartLegend
+          className="mt-1"
+          items={[
+            {
+              label: "chosen", color: "var(--rl)", shape: "band",
+              hint: "The action the controller actually recorded taking.",
+            },
+            {
+              label: "greedy, if different", color: "var(--accent)", shape: "band",
+              hint: "The highest-valued allowed action — what a non-exploring step would have taken.",
+            },
+            {
+              label: "other allowed actions", color: "var(--surface-5)", shape: "band",
+              hint: "Available this interval but not selected.",
+            },
+          ]}
+          note="bar length is the Q-value before this decision"
+        />
       )}
     </StageCard>
   );
@@ -428,8 +440,7 @@ function StageReward({ rewardStep, className }: { rewardStep?: RewardStep; class
             <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={36}
                    domain={[-1, 1]} />
             <Tooltip
-              contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border-2)",
-                              borderRadius: 8, fontSize: 11 }}
+              contentStyle={tooltipStyle}
               formatter={(_v: number, _n, p) => {
                 const d = p.payload as typeof bars[number] & { isTotal?: boolean };
                 return [fmtNumber(d.signed, 4), d.isTotal ? "final reward" : "contribution"];

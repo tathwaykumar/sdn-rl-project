@@ -739,6 +739,137 @@ export const inputStyle = {
   color: "var(--text-1)",
 };
 
+// ---------------------------------------------------------------- chart parts
+/** One tooltip style for every chart in the console.
+ *
+ * Previously each chart carried its own inline copy and they had drifted into
+ * two different looks, so hovering one panel and then another changed the
+ * furniture around the number. Recharts needs a plain object here, not a
+ * class, which is why this is a shared constant rather than CSS. */
+export const tooltipStyle = {
+  background: "var(--glass-strong)",
+  border: "1px solid var(--border-2)",
+  borderRadius: 10,
+  fontSize: 11,
+  boxShadow: "var(--e3)",
+  padding: "7px 10px",
+} as const;
+
+export const tooltipLabelStyle = {
+  color: "var(--text-3)",
+  fontSize: 10,
+  marginBottom: 2,
+} as const;
+
+export const tooltipCursor = { fill: "rgba(34,228,255,0.05)" } as const;
+
+/** Chart legend.
+ *
+ * Present whenever a chart draws two or more series, so identity never rests
+ * on colour memory alone; a single-series chart does not get one, because its
+ * title already names the series. `shape` matches how the series is actually
+ * drawn, so the key is readable against the plot rather than being a generic
+ * row of squares.
+ */
+export function ChartLegend({
+  items,
+  className,
+  note,
+}: {
+  items: {
+    label: string;
+    color: string;
+    shape?: "line" | "dashed" | "area" | "dot" | "band";
+    /** Dimmed, for a supporting series drawn faintly in the plot. */
+    faint?: boolean;
+    hint?: string;
+  }[];
+  className?: string;
+  /** Short caveat or axis note, shown right-aligned on wide layouts. */
+  note?: ReactNode;
+}) {
+  if (!items.length) return null;
+  return (
+    <div
+      className={cx(
+        "flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-2 t-small",
+        className,
+      )}
+    >
+      {items.map((it) => (
+        <span
+          key={it.label}
+          className="inline-flex items-center gap-1.5 min-w-0"
+          title={it.hint}
+        >
+          <Swatch shape={it.shape ?? "line"} color={it.color} faint={it.faint} />
+          <span className="truncate" style={{ color: "var(--text-2)" }}>
+            {it.label}
+          </span>
+        </span>
+      ))}
+      {note && (
+        <span className="t-micro sm:ml-auto" style={{ color: "var(--text-4)" }}>
+          {note}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function Swatch({
+  shape, color, faint,
+}: {
+  shape: "line" | "dashed" | "area" | "dot" | "band";
+  color: string;
+  faint?: boolean;
+}) {
+  const opacity = faint ? 0.4 : 1;
+  if (shape === "dot") {
+    return (
+      <span
+        className="w-2 h-2 rounded-full shrink-0"
+        style={{ background: color, opacity }}
+        aria-hidden="true"
+      />
+    );
+  }
+  if (shape === "band") {
+    return (
+      <span
+        className="w-3.5 h-2.5 rounded-sm shrink-0"
+        style={{ background: color, opacity: faint ? 0.2 : 0.34 }}
+        aria-hidden="true"
+      />
+    );
+  }
+  if (shape === "area") {
+    return (
+      <span
+        className="w-4 h-2.5 rounded-sm shrink-0"
+        style={{
+          background: `linear-gradient(180deg, ${color}, transparent)`,
+          borderTop: `1.5px solid ${color}`,
+          opacity,
+        }}
+        aria-hidden="true"
+      />
+    );
+  }
+  return (
+    <span
+      className="w-5 h-0.5 shrink-0 rounded"
+      style={{
+        background: shape === "dashed"
+          ? `repeating-linear-gradient(90deg, ${color} 0 4px, transparent 4px 7px)`
+          : color,
+        opacity,
+      }}
+      aria-hidden="true"
+    />
+  );
+}
+
 export const inputClass =
   "px-2.5 py-1.5 rounded-lg border text-[12px] outline-none focus:ring-1 focus:ring-sky-600";
 

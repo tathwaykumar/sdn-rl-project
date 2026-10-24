@@ -119,7 +119,7 @@ function Inspector({
       >
         {node.kind === "switch" ? (
           <>
-            <div className="grid grid-cols-3 gap-2 mb-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
               <Stat label="Total rules" value={counts ? counts.total : "—"} />
               <Stat label="Routed" value={counts ? counts.routed : "—"} tone="ok" />
               <Stat label="Ports" value={attached.length} />

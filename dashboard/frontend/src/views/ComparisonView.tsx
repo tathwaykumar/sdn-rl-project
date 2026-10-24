@@ -19,8 +19,9 @@ import type {
   ComparisonPayload, DeltaInfo, MetricInfo, StatSummary,
 } from "../api/types";
 import {
-  Card, Details, Empty, ErrorBox, Pill, Skeleton, SourceBadge, VARIANT_COLOR,
-  VARIANT_LABEL, fmtNumber, inputClass, inputStyle,
+  Card, ChartLegend, Details, Empty, ErrorBox, Pill, Skeleton, SourceBadge,
+  VARIANT_COLOR, VARIANT_LABEL, fmtNumber, inputClass, inputStyle,
+  tooltipCursor, tooltipStyle,
 } from "../components/ui";
 
 const VERDICT_STYLE: Record<string, { color: string; label: string; title: string }> = {
@@ -352,12 +353,8 @@ function HeadlineChart({
                 />
                 <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
                 <Tooltip
-                  cursor={{ fill: "rgba(34,228,255,0.04)" }}
-                  contentStyle={{
-                    background: "var(--glass-strong)",
-                    border: "1px solid var(--border-2)",
-                    borderRadius: 8, fontSize: 11,
-                  }}
+                  cursor={tooltipCursor}
+                  contentStyle={tooltipStyle}
                   formatter={(value: number, name: string, p) => {
                     const d = p.payload as Record<string, unknown>;
                     const n = d[`${name}_n`] as number | undefined;
@@ -398,32 +395,142 @@ function HeadlineChart({
             </ResponsiveContainer>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 mt-1 mb-3">
-            {data.variants.map((v) => (
-              <span key={v} className="flex items-center gap-1.5 t-small">
-                <span
-                  className="w-2.5 h-2.5 rounded-sm shrink-0"
-                  style={{ background: VARIANT_COLOR[v] }}
-                  aria-hidden="true"
-                />
-                <span style={{ color: "var(--text-2)" }}>
-                  {v}
-                  {v === baseline && (
-                    <span style={{ color: "var(--text-4)" }}> · baseline</span>
-                  )}
-                </span>
-              </span>
-            ))}
-            <span className="flex items-center gap-1.5 t-small">
-              <span className="shrink-0" style={{ color: "var(--text-2)" }}>⊢⊣</span>
-              <span style={{ color: "var(--text-3)" }}>95% confidence interval</span>
-            </span>
-          </div>
+          <ChartLegend
+            className="mb-3"
+            items={[
+              ...data.variants.map((v) => ({
+                label: v === baseline ? `${v} · baseline` : `Variant ${v}`,
+                color: VARIANT_COLOR[v],
+                shape: "band" as const,
+                hint: VARIANT_LABEL[v],
+              })),
+              {
+                label: "95% confidence interval",
+                color: "var(--text-2)",
+                shape: "line" as const,
+                hint: "The interval the verdict below tests for overlap.",
+              },
+            ]}
+            note={`n per cell shown on hover · ${data.runs_analysed} runs`}
+          />
 
+          <Takeaway data={data} metric={metric} baseline={baseline} />
           <VerdictMatrix data={data} metric={metric} baseline={baseline} />
         </>
       )}
     </Card>
+  );
+}
+
+/** The headline, in one sentence, for the metric on show.
+ *
+ * Someone opening this page sees four charts and a grid of verdicts; this says
+ * what they add up to before they start reading cells. It is assembled from
+ * the backend's own verdicts — the same ones the matrix below lists — so it
+ * cannot drift from them, and it is regenerated when the metric changes.
+ *
+ * The wording is kept to what the measurements support: "measured higher",
+ * never "improves" or "because". Where the intervals overlap it says the
+ * difference is not distinguishable at this sample size, which is not a
+ * finding of no difference.
+ */
+function Takeaway({
+  data, metric, baseline,
+}: {
+  data: ComparisonPayload;
+  metric: MetricInfo;
+  baseline: string;
+}) {
+  const others = data.variants.filter((v) => v !== baseline);
+
+  const groups = useMemo(() => {
+    const better: string[] = [];
+    const worse: string[] = [];
+    const flat: string[] = [];
+    const mixed: string[] = [];
+    for (const w of data.workloads) {
+      const verdicts = others
+        .map((v) => data.deltas[w]?.[v]?.[metric.key])
+        .filter((d): d is DeltaInfo => Boolean(d?.available) && Boolean(d?.verdict))
+        .map((d) => d.verdict as string);
+      if (!verdicts.length) continue;
+      const uniq = new Set(verdicts);
+      if (uniq.size > 1 && (uniq.has("improved") || uniq.has("regressed"))) mixed.push(w);
+      else if (uniq.has("improved") && uniq.size === 1) better.push(w);
+      else if (uniq.has("regressed") && uniq.size === 1) worse.push(w);
+      else flat.push(w);
+    }
+    return { better, worse, flat, mixed };
+  }, [data, metric, others]);
+
+  const list = (xs: string[]) =>
+    xs.length === 1
+      ? xs[0]
+      : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  const vs = others.length === 1 ? others[0] : others.join(" and ");
+
+  const clauses: { text: string; color: string }[] = [];
+  if (groups.better.length) {
+    clauses.push({
+      text: `Under ${list(groups.better)}, ${vs} measured `
+        + `${metric.lower_is_better ? "lower" : "higher"} than ${baseline} `
+        + "with non-overlapping 95% intervals.",
+      color: "var(--ok)",
+    });
+  }
+  if (groups.worse.length) {
+    clauses.push({
+      text: `Under ${list(groups.worse)}, ${vs} measured `
+        + `${metric.lower_is_better ? "higher" : "lower"} than ${baseline} `
+        + "with non-overlapping 95% intervals.",
+      color: "var(--bad)",
+    });
+  }
+  if (groups.mixed.length) {
+    clauses.push({
+      text: `Under ${list(groups.mixed)}, the variants did not agree with each `
+        + "other — read those rows individually.",
+      color: "var(--warn)",
+    });
+  }
+  if (groups.flat.length) {
+    clauses.push({
+      text: `Under ${list(groups.flat)}, no difference was distinguishable at `
+        + "five seeds per cell.",
+      color: "var(--text-3)",
+    });
+  }
+
+  if (!clauses.length) return null;
+
+  return (
+    <div
+      className="rounded-lg px-3 py-2.5 mb-3"
+      style={{
+        background: "rgba(10,18,31,0.5)",
+        border: "1px solid var(--border-1)",
+      }}
+    >
+      <p className="t-label mb-1.5" style={{ color: "var(--text-4)" }}>
+        At a glance — {metric.label}
+      </p>
+      <ul className="space-y-1">
+        {clauses.map((c) => (
+          <li key={c.text} className="flex items-start gap-2 t-body">
+            <span
+              className="w-1.5 h-1.5 rounded-full shrink-0 mt-[6px]"
+              style={{ background: c.color }}
+              aria-hidden="true"
+            />
+            <span style={{ color: "var(--text-2)" }}>{c.text}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="t-small mt-2" style={{ color: "var(--text-4)" }}>
+        Differences are measured, not explained: this page compares outcomes
+        across variants and does not establish why they differ.
+      </p>
+    </div>
   );
 }
 

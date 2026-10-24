@@ -18,7 +18,8 @@ import { api } from "../api/client";
 import { useAsync } from "../hooks/useLive";
 import type { RewardExplain, RewardStep } from "../api/types";
 import {
-  Card, Details, Empty, ErrorBox, Pill, Skeleton, SourceBadge, StatusDot,
+  Card, ChartLegend, Details, Empty, ErrorBox, Pill, Skeleton, SourceBadge,
+  StatusDot, tooltipStyle,
   cx, fmtNumber, fmtTime, inputClass, inputStyle,
 } from "../components/ui";
 
@@ -199,8 +200,7 @@ function RewardHistory({
             />
             <ReferenceLine y={0} stroke="var(--border-3)" strokeWidth={1} />
             <Tooltip
-              contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border-2)",
-                              borderRadius: 8, fontSize: 11 }}
+              contentStyle={tooltipStyle}
               labelFormatter={(v) => `Step ${v}`}
               formatter={(v: number) => [fmtNumber(v, 4), "reward"]}
             />
@@ -340,10 +340,7 @@ function LearningDynamics({ steps }: { steps: RewardStep[] }) {
             )}
             <ReferenceLine yAxisId="r" y={0} stroke="var(--border-3)" />
             <Tooltip
-              contentStyle={{
-                background: "var(--glass-strong)", border: "1px solid var(--border-2)",
-                borderRadius: 8, fontSize: 11,
-              }}
+              contentStyle={tooltipStyle}
               labelFormatter={(v) => `Step ${v}`}
               formatter={(value: number, name: string) => {
                 const labels: Record<string, string> = {
@@ -380,12 +377,29 @@ function LearningDynamics({ steps }: { steps: RewardStep[] }) {
         </ResponsiveContainer>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 t-small">
-        <Legend color="var(--rl)" label={`reward (${WINDOW}-step mean)`} />
-        <Legend color="var(--rl)" label="reward (per step)" faint />
-        {hasEpsilon && <Legend color="var(--warn)" label="ε, right axis" dashed />}
-        <Legend color="var(--warn)" label="exploratory step" dot />
-      </div>
+      <ChartLegend
+        items={[
+          {
+            label: `reward, ${WINDOW}-step mean`, color: "var(--rl)", shape: "area",
+            hint: "A rolling mean of the recorded rewards — a smoothing, not a model.",
+          },
+          {
+            label: "reward, per step", color: "var(--rl)", shape: "line", faint: true,
+            hint: "The value recorded for each individual interval.",
+          },
+          ...(hasEpsilon
+            ? [{
+                label: "ε, right axis", color: "var(--warn)", shape: "dashed" as const,
+                hint: "Exploration rate. Decays on a fixed schedule set by configuration.",
+              }]
+            : []),
+          {
+            label: "exploratory step", color: "var(--warn)", shape: "dot",
+            hint: "The agent took a random action instead of its current best.",
+          },
+        ]}
+        note="left axis: reward, clipped to ±1"
+      />
 
       {hasTd && (
         <div className="mt-3 pt-3 border-t" style={{ borderColor: "var(--border-1)" }}>
@@ -406,10 +420,7 @@ function LearningDynamics({ steps }: { steps: RewardStep[] }) {
                        axisLine={{ stroke: "var(--border-1)" }} minTickGap={26} />
                 <YAxis tick={{ fontSize: 9 }} tickLine={false} axisLine={false} width={42} />
                 <Tooltip
-                  contentStyle={{
-                    background: "var(--glass-strong)", border: "1px solid var(--border-2)",
-                    borderRadius: 8, fontSize: 11,
-                  }}
+                  contentStyle={tooltipStyle}
                   labelFormatter={(v) => `Step ${v}`}
                   formatter={(value: number, name: string) => [
                     fmtNumber(value, 4),
@@ -462,41 +473,6 @@ function LearningDynamics({ steps }: { steps: RewardStep[] }) {
         </ul>
       </Details>
     </Card>
-  );
-}
-
-/** Small legend entry, matching the stroke style used in the chart. */
-function Legend({
-  color, label, dashed, faint, dot,
-}: {
-  color: string;
-  label: string;
-  dashed?: boolean;
-  faint?: boolean;
-  dot?: boolean;
-}) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      {dot ? (
-        <span
-          className="w-2 h-2 rounded-full shrink-0"
-          style={{ background: color }}
-          aria-hidden="true"
-        />
-      ) : (
-        <span
-          className="w-5 h-0.5 shrink-0"
-          style={{
-            background: dashed
-              ? `repeating-linear-gradient(90deg, ${color} 0 4px, transparent 4px 7px)`
-              : color,
-            opacity: faint ? 0.35 : 1,
-          }}
-          aria-hidden="true"
-        />
-      )}
-      <span style={{ color: "var(--text-3)" }}>{label}</span>
-    </span>
   );
 }
 
@@ -586,10 +562,7 @@ function RewardWaterfall({ step }: { step: RewardStep }) {
             <ReferenceLine y={0} stroke="var(--border-3)" />
             <Tooltip
               cursor={{ fill: "rgba(34,228,255,0.04)" }}
-              contentStyle={{
-                background: "var(--glass-strong)", border: "1px solid var(--border-2)",
-                borderRadius: 8, fontSize: 11,
-              }}
+              contentStyle={tooltipStyle}
               formatter={(_v: number, _n, p) => {
                 const d = p.payload as {
                   signed: number; term: number | null; weight: number | null;
@@ -684,8 +657,7 @@ function ContributionChart({ step }: { step: RewardStep }) {
             <ReferenceLine x={0} stroke="var(--border-3)" />
             <Tooltip
               cursor={{ fill: "rgba(255,255,255,0.03)" }}
-              contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border-2)",
-                              borderRadius: 8, fontSize: 11 }}
+              contentStyle={tooltipStyle}
               formatter={(v: number, _n, p) => {
                 const d = p.payload as { term: number; weight: number };
                 return [

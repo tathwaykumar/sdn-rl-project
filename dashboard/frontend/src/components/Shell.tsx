@@ -45,27 +45,27 @@ const icon = (path: ReactNode) => (
 export const NAV_ITEMS: NavItem[] = [
   {
     id: "overview", label: "Overview", group: "Operations",
-    hint: "System state at a glance",
+    hint: "What is the network doing right now?",
     icon: icon(<><rect x="3" y="3" width="7" height="9" rx="1.5" /><rect x="14" y="3" width="7" height="5" rx="1.5" /><rect x="14" y="12" width="7" height="9" rx="1.5" /><rect x="3" y="16" width="7" height="5" rx="1.5" /></>),
   },
   {
     id: "topology", label: "Live Topology", group: "Operations",
-    hint: "Switches, links and confirmed paths",
+    hint: "Where is traffic actually forwarded, and on whose evidence?",
     icon: icon(<><circle cx="5" cy="12" r="2.4" /><circle cx="19" cy="6" r="2.4" /><circle cx="19" cy="18" r="2.4" /><path d="M7.2 11 16.8 6.8M7.2 13l9.6 4.2" /></>),
   },
   {
     id: "metrics", label: "Metrics & Analytics", group: "Operations",
-    hint: "Throughput, latency, loss, flow tables",
+    hint: "How is the network performing, and how is each figure measured?",
     icon: icon(<><path d="M3 20h18" /><rect x="5" y="11" width="3.4" height="6" rx="1" /><rect x="10.3" y="7" width="3.4" height="10" rx="1" /><rect x="15.6" y="13" width="3.4" height="4" rx="1" /></>),
   },
   {
     id: "reward", label: "Reward Explorer", group: "Reinforcement learning",
-    hint: "How the agent's score is built",
+    hint: "What score did the agent earn, and which term produced it?",
     icon: icon(<><circle cx="12" cy="9" r="5" /><path d="M8.5 13.5 7 21l5-2.6L17 21l-1.5-7.5" /></>),
   },
   {
     id: "decisions", label: "Decision Inspector", group: "Reinforcement learning",
-    hint: "What the agent chose, and whether switches agreed",
+    hint: "What did the agent decide, and did the switches carry it out?",
     icon: icon(<><path d="M12 3v6M12 15v6M5.6 7.6l4.2 4.2M14.2 12.2l4.2 4.2" /><circle cx="12" cy="12" r="2.6" /></>),
   },
   {
@@ -75,12 +75,12 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     id: "comparison", label: "A/B/C Comparison", group: "Experiments",
-    hint: "Variant results with uncertainty",
+    hint: "Did the agent beat fixed routing, and is the difference real?",
     icon: icon(<><path d="M4 20V9M12 20V4M20 20v-7" /><path d="M2 20h20" /></>),
   },
   {
     id: "history", label: "History", group: "Experiments",
-    hint: "Every run, with provenance and exports",
+    hint: "Which runs produced these findings, and can they be traced?",
     icon: icon(<><path d="M3 12a9 9 0 1 0 2.6-6.4" /><path d="M3 4v5h5" /><path d="M12 7.5V12l3 1.8" /></>),
   },
 ];

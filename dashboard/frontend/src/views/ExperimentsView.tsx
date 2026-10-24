@@ -98,7 +98,7 @@ export function ExperimentsView() {
         <Card title="Start a run" subtitle="Invokes experiments/run_experiment.py directly">
           <div className="space-y-3">
             <Field label="Variant">
-              <div className="grid grid-cols-3 gap-1.5">
+              <div className="grid grid-cols-3 gap-1.5 min-w-0">
                 {opts.variants.map((v) => (
                   <button
                     key={v.id}
