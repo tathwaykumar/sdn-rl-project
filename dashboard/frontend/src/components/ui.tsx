@@ -98,6 +98,7 @@ export function Card({
   accent,
   raised,
   icon,
+  live,
 }: {
   title?: ReactNode;
   subtitle?: ReactNode;
@@ -109,7 +110,11 @@ export function Card({
   accent?: "net" | "rl";
   raised?: boolean;
   icon?: ReactNode;
+  /** Streaming live telemetry: adds the sweeping sheen and the glow ring.
+      Pass this only when the panel's data really is arriving right now. */
+  live?: boolean;
 }) {
+  const tint = accent === "rl" ? "var(--rl)" : "var(--accent)";
   return (
     <section
       className={cx(
@@ -117,26 +122,43 @@ export function Card({
         raised && "panel-raised",
         accent === "net" && "rail-accent",
         accent === "rl" && "rail-rl",
+        live && "panel-live",
         className,
       )}
     >
+      {live && <span className="sheen" aria-hidden="true" />}
       {(title || right) && (
         <header
-          className="flex items-start justify-between gap-3 px-4 py-3 border-b"
-          style={{ borderColor: "var(--hairline)" }}
+          className="flex items-start justify-between gap-3 px-4 py-2.5 border-b relative"
+          style={{
+            borderColor: "var(--hairline)",
+            background: "linear-gradient(180deg, rgba(120,190,240,0.04), transparent)",
+          }}
         >
           <div className="min-w-0 flex items-start gap-2.5">
-            {icon && (
+            {icon ? (
               <span
                 className="shrink-0 mt-0.5"
-                style={{ color: accent === "rl" ? "var(--rl)" : "var(--accent)" }}
+                style={{ color: tint, filter: `drop-shadow(0 0 6px ${tint})` }}
                 aria-hidden="true"
               >
                 {icon}
               </span>
+            ) : (
+              title && (
+                <span
+                  className="shrink-0 mt-[7px] w-[6px] h-[6px] rotate-45"
+                  style={{ background: tint, boxShadow: `0 0 8px ${tint}` }}
+                  aria-hidden="true"
+                />
+              )
             )}
             <div className="min-w-0">
-              {title && <h2 className="t-h2">{title}</h2>}
+              {title && (
+                <h2 className="t-h2 uppercase" style={{ letterSpacing: "0.045em" }}>
+                  {title}
+                </h2>
+              )}
               {subtitle && (
                 <p className="t-small mt-0.5" style={{ color: "var(--text-3)" }}>
                   {subtitle}
@@ -147,7 +169,7 @@ export function Card({
           {right && <div className="shrink-0">{right}</div>}
         </header>
       )}
-      <div className={cx("p-4 flex-1 min-h-0", bodyClassName)}>{children}</div>
+      <div className={cx("p-4 flex-1 min-h-0 relative", bodyClassName)}>{children}</div>
     </section>
   );
 }
@@ -165,8 +187,26 @@ export function SectionTitle({
   return (
     <div className="flex items-end justify-between gap-3 mb-2.5 mt-1">
       <div className="min-w-0">
-        <h2 className="t-label" style={{ color: "var(--text-3)" }}>
+        <h2
+          className="t-label flex items-center gap-2"
+          style={{ color: "var(--accent)" }}
+        >
+          <span
+            className="w-1 h-1 rounded-full shrink-0"
+            style={{ background: "var(--accent)", boxShadow: "0 0 7px var(--accent)" }}
+            aria-hidden="true"
+          />
           {children}
+          {/* A rule that runs out to the edge: reads as an instrument label
+              rather than a document heading. */}
+          <span
+            className="flex-1 h-px min-w-[1.5rem]"
+            style={{
+              background:
+                "linear-gradient(90deg, var(--border-2), transparent)",
+            }}
+            aria-hidden="true"
+          />
         </h2>
         {hint && (
           <p className="t-small mt-0.5" style={{ color: "var(--text-4)" }}>
@@ -211,39 +251,103 @@ export function HeroMetric({
         ? "var(--warn)"
         : "var(--text-1)";
 
+  const glow = unavailable
+    ? "transparent"
+    : tone === "bad"
+      ? "var(--bad-glow)"
+      : tone === "warn"
+        ? "var(--warn-glow)"
+        : "var(--accent-glow)";
+
   return (
     <div
-      className="panel panel-hover relative overflow-hidden px-4 pt-3.5 pb-3 flex flex-col gap-1"
+      className="panel panel-hover relative overflow-hidden px-4 pt-3 pb-2.5 flex flex-col gap-0.5"
       title={explain}
     >
+      {/* A pool of light behind the number: the readout is the focal point. */}
+      {!unavailable && (
+        <span
+          className="absolute pointer-events-none"
+          style={{
+            left: -20, top: 2, width: 190, height: 110,
+            background: `radial-gradient(circle at 30% 50%, ${glow}, transparent 68%)`,
+            opacity: 0.5,
+          }}
+          aria-hidden="true"
+        />
+      )}
       {spark && spark.length > 1 && (
         <Sparkline values={spark} tone={tone} />
       )}
       <div className="flex items-start justify-between gap-2 relative">
-        <span className="t-small font-medium truncate" style={{ color: "var(--text-2)" }}>
+        <span
+          className="t-label truncate"
+          style={{ color: "var(--text-3)" }}
+        >
           {label}
         </span>
         {source && <SourceBadge source={source} />}
       </div>
       <div className="flex items-baseline gap-1.5 relative">
         <span
-          className="num leading-none"
-          style={{ color, fontSize: 30, fontWeight: 640, letterSpacing: "-0.025em" }}
+          className={cx("readout leading-none", !unavailable && "glow-text")}
+          style={{ color, fontSize: 38, fontWeight: 650 }}
         >
           {value}
         </span>
         {unit && !unavailable && (
-          <span className="t-small" style={{ color: "var(--text-3)" }}>
+          <span
+            className="t-small font-semibold"
+            style={{ color: "var(--text-3)" }}
+          >
             {unit}
           </span>
         )}
       </div>
+      {/* Segmented meter: the last N samples as LED bars, drawn only from the
+          same telemetry the number came from. */}
+      {spark && spark.length > 1 && !unavailable && (
+        <LedMeter values={spark} tone={tone} />
+      )}
       <div className="flex items-center justify-between gap-2 relative mt-auto pt-1">
         <span className="t-small truncate" style={{ color: "var(--text-3)" }}>
           {sub}
         </span>
         <DirectionHint direction={direction} />
       </div>
+    </div>
+  );
+}
+
+/** Segmented bar readout of recent samples. Height is relative to the window's
+    own maximum, so it shows shape, not an absolute scale — the number above
+    carries the magnitude. */
+function LedMeter({ values, tone }: { values: number[]; tone?: string }) {
+  const window = values.slice(-28);
+  const max = Math.max(...window, 0.0001);
+  const color =
+    tone === "bad" ? "var(--bad)" : tone === "warn" ? "var(--warn)" : "var(--accent)";
+  return (
+    <div
+      className="flex items-end gap-[2px] h-5 relative mt-1"
+      aria-hidden="true"
+    >
+      {window.map((v, i) => {
+        const h = Math.max(8, (v / max) * 100);
+        const recent = i >= window.length - 3;
+        return (
+          <span
+            key={i}
+            className="flex-1 rounded-sm"
+            style={{
+              height: `${h}%`,
+              background: color,
+              opacity: recent ? 0.95 : 0.3 + (i / window.length) * 0.35,
+              boxShadow: recent ? `0 0 8px ${color}` : "none",
+            }}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -321,8 +425,13 @@ export function SourceBadge({
   return (
     <span className="inline-flex items-center gap-1.5" title={style.title}>
       <span
-        className="px-1.5 py-0.5 rounded text-[10px] font-semibold tracking-wider"
-        style={{ background: style.bg, color: style.fg }}
+        className="px-1.5 py-[1px] rounded text-[9.5px] font-bold tracking-[0.1em] whitespace-nowrap"
+        style={{
+          background: style.bg,
+          color: style.fg,
+          border: `1px solid ${style.fg}44`,
+          boxShadow: key === "live" ? `0 0 14px -4px ${style.fg}` : "none",
+        }}
       >
         {style.label}
       </span>
@@ -352,10 +461,22 @@ export function StatusDot({
     idle: "var(--idle)",
   }[tone];
   return (
-    <span
-      className={cx("inline-block w-2 h-2 rounded-full", pulse && "pulse-soft")}
-      style={{ background: color }}
-    />
+    <span className="relative inline-flex items-center justify-center w-2 h-2 shrink-0">
+      {pulse && (
+        <span
+          className="absolute w-2 h-2 rounded-full pulse-ring"
+          style={{ color }}
+          aria-hidden="true"
+        />
+      )}
+      <span
+        className="inline-block w-2 h-2 rounded-full"
+        style={{
+          background: color,
+          boxShadow: tone === "idle" ? "none" : `0 0 8px ${color}`,
+        }}
+      />
+    </span>
   );
 }
 
@@ -370,10 +491,17 @@ export function Empty({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center text-center py-10 px-6 gap-2">
+    <div className="flex flex-col items-center justify-center text-center py-10 px-6 gap-2 relative overflow-hidden">
+      {/* A waiting instrument sweeps; it is not reporting a measurement. */}
+      <span className="scanline" aria-hidden="true" />
       <div
-        className="w-9 h-9 rounded-lg border flex items-center justify-center text-base"
-        style={{ borderColor: "var(--border-2)", color: "var(--text-3)" }}
+        className="w-10 h-10 rounded-lg border flex items-center justify-center text-base relative"
+        style={{
+          borderColor: "var(--border-2)",
+          color: "var(--text-3)",
+          background: "rgba(10,18,31,0.6)",
+          boxShadow: "inset 0 0 18px rgba(34,228,255,0.07)",
+        }}
       >
         ∅
       </div>
@@ -421,15 +549,12 @@ export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () =
 
 export function Skeleton({ rows = 3 }: { rows?: number }) {
   return (
-    <div className="space-y-2 animate-pulse" aria-label="loading">
+    <div className="space-y-2" aria-label="loading">
       {Array.from({ length: rows }).map((_, i) => (
         <div
           key={i}
-          className="h-3 rounded"
-          style={{
-            background: "var(--surface-3)",
-            width: `${70 + ((i * 13) % 25)}%`,
-          }}
+          className="h-3 skeleton"
+          style={{ width: `${70 + ((i * 13) % 25)}%` }}
         />
       ))}
     </div>
@@ -482,11 +607,14 @@ export function MetricCard({
         {source && <SourceBadge source={source} />}
       </div>
       <div className="flex items-baseline gap-1.5">
-        <span className="text-2xl font-semibold num leading-tight" style={{ color }}>
+        <span
+          className={cx("readout text-[26px] leading-tight", !unavailable && "glow-text")}
+          style={{ color }}
+        >
           {value}
         </span>
         {unit && !unavailable && (
-          <span className="text-[11px]" style={{ color: "var(--text-3)" }}>
+          <span className="text-[11px] font-semibold" style={{ color: "var(--text-3)" }}>
             {unit}
           </span>
         )}
@@ -537,10 +665,22 @@ export function Button({
   title?: string;
   type?: "button" | "submit";
 }) {
-  const styles: Record<string, { bg: string; fg: string; border: string }> = {
-    default: { bg: "var(--surface-2)", fg: "var(--text-1)", border: "var(--border-2)" },
-    primary: { bg: "#1f5fae", fg: "#ffffff", border: "#2a73c9" },
-    danger: { bg: "rgba(224,82,82,0.15)", fg: "#f0a3a3", border: "rgba(224,82,82,0.4)" },
+  const styles: Record<
+    string,
+    { bg: string; fg: string; border: string; glow?: string }
+  > = {
+    default: {
+      bg: "rgba(17,28,45,0.8)", fg: "var(--text-1)", border: "var(--border-2)",
+    },
+    primary: {
+      bg: "linear-gradient(135deg, rgba(34,228,255,0.22), rgba(139,92,246,0.22))",
+      fg: "var(--accent-strong)", border: "var(--accent-ring)",
+      glow: "0 0 22px -6px var(--accent-glow)",
+    },
+    danger: {
+      bg: "var(--bad-dim)", fg: "var(--bad)", border: "rgba(255,107,107,0.42)",
+      glow: "0 0 20px -8px var(--bad-glow)",
+    },
     ghost: { bg: "transparent", fg: "var(--text-2)", border: "var(--border-1)" },
   };
   const s = styles[variant];
@@ -551,10 +691,18 @@ export function Button({
       disabled={disabled}
       title={title}
       className={cx(
-        "px-3 py-1.5 rounded-lg border text-[12px] font-medium transition-opacity",
-        disabled ? "opacity-40 cursor-not-allowed" : "hover:opacity-85",
+        "px-3 py-1.5 rounded-lg border text-[12px] font-semibold tracking-wide",
+        "transition-all duration-150",
+        disabled
+          ? "opacity-40 cursor-not-allowed"
+          : "hover:brightness-125 active:scale-[0.98]",
       )}
-      style={{ background: s.bg, color: s.fg, borderColor: s.border }}
+      style={{
+        background: s.bg,
+        color: s.fg,
+        borderColor: s.border,
+        boxShadow: disabled ? "none" : s.glow,
+      }}
     >
       {children}
     </button>
@@ -674,11 +822,12 @@ export function Pill({
 }) {
   return (
     <span
-      className="px-1.5 py-0.5 rounded text-[10px] font-medium"
+      className="px-1.5 py-[1px] rounded text-[10px] font-semibold tracking-wide"
       title={title}
       style={{
-        background: color ? `${color}22` : "var(--surface-3)",
+        background: color ? `${color}1f` : "rgba(17,28,45,0.8)",
         color: color ?? "var(--text-2)",
+        border: `1px solid ${color ? `${color}3d` : "var(--border-1)"}`,
       }}
     >
       {children}

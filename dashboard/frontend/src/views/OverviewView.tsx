@@ -17,7 +17,7 @@ import type { Capabilities, LiveSnapshot, RunSummary } from "../api/types";
 import type { PageId } from "../components/Shell";
 import {
   Card, Empty, HeroMetric, Pill, SectionTitle, SourceBadge, StatusDot,
-  VARIANT_COLOR, VARIANT_LABEL, fmtDuration, fmtNumber, fmtTime,
+  VARIANT_COLOR, VARIANT_LABEL, cx, fmtDuration, fmtNumber, fmtTime,
 } from "../components/ui";
 import { TopologyCanvas } from "./TopologyCanvas";
 
@@ -148,9 +148,10 @@ export function OverviewView({
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-4">
           <Card
             accent="net"
-            className="min-h-[440px]"
+            className="min-h-[480px]"
             bodyClassName="p-0"
             raised
+            live={active}
             title="Live topology"
             subtitle={
               active
@@ -159,7 +160,7 @@ export function OverviewView({
             }
             right={<SourceBadge source={active ? "live" : "config"} />}
           >
-            <div style={{ height: 420 }}>
+            <div style={{ height: 460 }}>
               <TopologyCanvas snapshot={runId ? null : snapshot} compact />
             </div>
           </Card>
@@ -220,14 +221,18 @@ function StatusBanner({
 
   return (
     <div
-      className="panel panel-raised relative overflow-hidden px-5 py-4"
+      className={cx(
+        "panel panel-raised relative overflow-hidden px-5 py-4",
+        active && "panel-live",
+      )}
       style={{
         backgroundImage:
-          "linear-gradient(120deg, rgba(34,211,238,0.07), transparent 46%), " +
-          "linear-gradient(300deg, rgba(139,92,246,0.06), transparent 44%)",
+          "linear-gradient(120deg, rgba(34,228,255,0.1), transparent 44%), " +
+          "linear-gradient(300deg, rgba(139,92,246,0.09), transparent 42%)",
       }}
     >
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      {active && <span className="sheen" aria-hidden="true" />}
+      <div className="flex flex-wrap items-start justify-between gap-4 relative">
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <StatusDot tone={active ? "ok" : "idle"} pulse={active} />
@@ -235,10 +240,13 @@ function StatusBanner({
               {active ? "Experiment running" : runId ? "Viewing recorded run" : "Idle"}
             </span>
           </div>
-          <h1 className="t-display">
+          <h1 className="t-display" style={{ fontSize: 34 }}>
             {active ? (
               <>
-                <span style={{ color: VARIANT_COLOR[live?.variant ?? "A"] }}>
+                <span
+                  className="glow-text"
+                  style={{ color: VARIANT_COLOR[live?.variant ?? "A"] }}
+                >
                   Variant {live?.variant}
                 </span>
                 <span style={{ color: "var(--text-3)" }}> · </span>
@@ -298,13 +306,20 @@ function StatusBanner({
             )}
           </div>
           {progress !== null && (
-            <div className="h-1.5 rounded-full overflow-hidden"
-                 style={{ background: "var(--surface-3)" }}>
+            <div
+              className="h-2 rounded-full overflow-hidden relative"
+              style={{
+                background: "rgba(255,255,255,0.06)",
+                border: "1px solid var(--border-1)",
+              }}
+            >
               <div
                 className="h-full rounded-full transition-all duration-700"
                 style={{
                   width: `${progress}%`,
-                  background: "linear-gradient(90deg, var(--accent-3), var(--accent))",
+                  background:
+                    "linear-gradient(90deg, var(--accent-3), var(--accent), var(--rl))",
+                  boxShadow: "0 0 16px -2px var(--accent-glow)",
                 }}
               />
             </div>

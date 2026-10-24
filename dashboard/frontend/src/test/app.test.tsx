@@ -171,10 +171,13 @@ describe("App", () => {
     expect(screen.getAllByText(/heavy/).length).toBeGreaterThan(0);
     expect(screen.getByText(/Experiment running/)).toBeInTheDocument();
     // Live measurements reach the headline metrics (9.9 Mbit/s, 88 rules).
-    expect(screen.getByText("9.90")).toBeInTheDocument();
-    expect(screen.getByText("88")).toBeInTheDocument();
+    // Each also appears in the chrome's top readout strip, so these are
+    // deliberately "all" queries: the same measurement is shown twice, in the
+    // always-visible strip and in the page's own hero metric.
+    expect(screen.getAllByText("9.90").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("88").length).toBeGreaterThan(0);
     // Latency comes from the host probe, not the controller.
-    expect(screen.getByText("12.4")).toBeInTheDocument();
+    expect(screen.getAllByText("12.4").length).toBeGreaterThan(0);
   });
 
   it("separates confirmed forwarding from agent intent on the Overview", async () => {

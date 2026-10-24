@@ -46,6 +46,7 @@ export default function App() {
       connectionError={feed.error}
       onReconnect={feed.reconnectNow}
       mock={mock}
+      snapshot={snapshot}
       runBadge={
         <RunBadge snapshot={snapshot} runId={runId}
                   onClear={() => setRunId(undefined)} />
