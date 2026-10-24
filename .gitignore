@@ -58,3 +58,4 @@ results/matrix_run.log
 
 # Diagnostic sampling output (regenerate with experiments/diagnose_loss_run.py)
 results/diagnostics/
+dashboard/frontend/*.tsbuildinfo
