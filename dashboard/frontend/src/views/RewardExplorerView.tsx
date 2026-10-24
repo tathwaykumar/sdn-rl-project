@@ -87,6 +87,7 @@ export function RewardExplorerView({ runId }: { runId?: string }) {
             selectedStep={current?.step ?? null}
             onSelect={(s) => setSelected(s)}
           />
+          {current && <RewardWaterfall step={current} />}
           {current && <ContributionChart step={current} />}
         </div>
 
@@ -212,6 +213,144 @@ function RewardHistory({
           </LineChart>
         </ResponsiveContainer>
       </div>
+    </Card>
+  );
+}
+
+/** Waterfall of the weighted reward terms.
+ *
+ * Reads left to right as the score is actually assembled: start at zero, add
+ * the throughput credit, then subtract each cost term, and land on the
+ * recorded reward. The bar chart below answers "how big is each term"; this
+ * answers "how did the number get here", which is the question someone meeting
+ * the reward function for the first time actually has.
+ *
+ * Built with the invisible-base technique: each row carries a transparent
+ * `base` bar that lifts the visible `delta` bar to where the running total
+ * sits, both in one stack.
+ */
+function RewardWaterfall({ step }: { step: RewardStep }) {
+  const present = step.contributions.filter((c) => c.contribution !== null);
+
+  if (!present.length) {
+    return (
+      <Card title="How this reward was built" accent="rl">
+        <Empty
+          title="No component values recorded for this interval"
+          detail="The waterfall is drawn only from recorded per-term values; it is never reconstructed from the total."
+        />
+      </Card>
+    );
+  }
+
+  let running = 0;
+  const bars = present.map((c) => {
+    const v = c.contribution as number;
+    const base = v >= 0 ? running : running + v;
+    running += v;
+    return {
+      label: c.label,
+      base,
+      delta: Math.abs(v),
+      signed: v,
+      term: c.term_value,
+      weight: c.weight,
+      isTotal: false,
+    };
+  });
+
+  // The closing bar rises from zero so it reads as the resulting level, not as
+  // one more increment.
+  const total = {
+    label: "Reward",
+    base: Math.min(0, running),
+    delta: Math.abs(running),
+    signed: running,
+    term: null as number | null,
+    weight: null as number | null,
+    isTotal: true,
+  };
+
+  const rows = [...bars, total];
+
+  return (
+    <Card
+      title="How this reward was built"
+      subtitle={`Step ${step.step} — start at zero, apply each weighted term in order, land on the recorded score`}
+      accent="rl"
+      right={
+        step.reconciles ? (
+          <Pill color="var(--ok)" title="Components sum to the recorded reward.">
+            reconciled
+          </Pill>
+        ) : (
+          <Pill color="var(--warn)" title="See the reconciliation panel.">
+            check
+          </Pill>
+        )
+      }
+    >
+      <div style={{ height: 230 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={rows} margin={{ top: 8, right: 8, bottom: 4, left: -12 }}>
+            <CartesianGrid stroke="var(--border-1)" strokeDasharray="2 5" vertical={false} />
+            <XAxis
+              dataKey="label" tick={{ fontSize: 9.5 }} tickLine={false}
+              axisLine={{ stroke: "var(--border-1)" }} interval={0}
+              angle={-18} textAnchor="end" height={54}
+            />
+            <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+            <ReferenceLine y={0} stroke="var(--border-3)" />
+            <Tooltip
+              cursor={{ fill: "rgba(34,228,255,0.04)" }}
+              contentStyle={{
+                background: "var(--glass-strong)", border: "1px solid var(--border-2)",
+                borderRadius: 8, fontSize: 11,
+              }}
+              formatter={(_v: number, _n, p) => {
+                const d = p.payload as {
+                  signed: number; term: number | null; weight: number | null;
+                  isTotal: boolean;
+                };
+                if (d.isTotal) {
+                  return [fmtNumber(d.signed, 4), "running total"];
+                }
+                return [
+                  `${d.signed >= 0 ? "+" : ""}${fmtNumber(d.signed, 4)}`
+                  + `  (term ${fmtNumber(d.term, 3)} × weight ${d.weight})`,
+                  "applied",
+                ];
+              }}
+            />
+            {/* The lift. Transparent, and excluded from the tooltip. */}
+            <Bar dataKey="base" stackId="w" fill="transparent" isAnimationActive={false}
+                 legendType="none" tooltipType="none" />
+            <Bar dataKey="delta" stackId="w" radius={[3, 3, 0, 0]} isAnimationActive={false}>
+              {rows.map((r, i) => (
+                <Cell
+                  key={i}
+                  fill={
+                    r.isTotal
+                      ? "var(--rl)"
+                      : r.signed >= 0 ? "var(--ok)" : "var(--bad)"
+                  }
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="t-small leading-relaxed mt-1" style={{ color: "var(--text-3)" }}>
+        Green raises the score, red lowers it, violet is the result. Every bar
+        is a recorded term value multiplied by its configured weight — nothing
+        here is inferred from the total.
+      </p>
+      {step.clipped && (
+        <p className="t-small mt-1.5 leading-relaxed" style={{ color: "var(--warn)" }}>
+          This interval hit the ±1 clip, so the final bar is the clipped value
+          and the terms genuinely do not sum to it.
+        </p>
+      )}
     </Card>
   );
 }
