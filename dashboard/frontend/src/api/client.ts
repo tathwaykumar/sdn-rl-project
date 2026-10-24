@@ -9,6 +9,7 @@ import type {
   FlowTablePayload, Health, LatencyPayload, LiveMetrics, LiveSnapshot,
   LiveStatus, MetricSeries, RunSummary, TopologyPayload, Verification,
   Decision, DecodedState, RewardExplain, RewardModel, MetricCatalog,
+  StepVerification,
 } from "./types";
 
 export class ApiError extends Error {
@@ -83,6 +84,10 @@ export const api = {
     }>(`/api/rl/decisions${qs({ run_id: runId, limit })}`),
   verification: (runId?: string) =>
     request<Verification>(`/api/rl/verification${qs({ run_id: runId })}`),
+  stepVerification: (step: number, runId?: string) =>
+    request<StepVerification>(
+      `/api/rl/step-verification${qs({ step, run_id: runId })}`,
+    ),
 
   metricsLive: (runId?: string) =>
     request<LiveMetrics>(`/api/metrics/live${qs({ run_id: runId })}`),

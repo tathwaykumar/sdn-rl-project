@@ -35,6 +35,7 @@ from typing import Any, Dict, List, Optional
 
 from .config import PROJECT_ROOT, DataSource
 from .runs import find_run
+from .telemetry import _parse_q_values
 
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
@@ -339,7 +340,35 @@ def explain_decisions(run_id: Optional[str], raw_dir: Optional[str],
             "q_before": _to_float(row.get("q_before")),
             "q_after": _to_float(row.get("q_after")),
             "td_error": _to_float(row.get("td_error")),
+            "q_values": _parse_q_values(row.get("q_values_json")),
         })
+
+    # Cross-check: the controller's own greedy_action must match the argmax
+    # of the Q-values it logged for the *same* step, restricted to the
+    # actions it marked as allowed. This is the same kind of evidence check
+    # as the reward reconciliation above, applied to the "Choose Action"
+    # stage of the journey -- if these ever disagreed, the journey would be
+    # showing two different, contradictory accounts of why an action was
+    # picked.
+    q_checked = q_agree = q_disagree = 0
+    for step in steps:
+        q = step.get("q_values")
+        if not q or not q.get("allowed") or not q.get("values"):
+            continue
+        values = q["values"]
+        allowed = [a for a in q["allowed"] if a in values]
+        if not allowed:
+            continue
+        argmax = max(allowed, key=lambda k: values[k])
+        step["q_argmax"] = argmax
+        greedy = step.get("greedy_action")
+        if greedy:
+            q_checked += 1
+            if argmax == greedy:
+                q_agree += 1
+            else:
+                q_disagree += 1
+            step["q_argmax_matches_greedy"] = (argmax == greedy)
 
     checked = reconciled + unreconciled
     return {
@@ -366,6 +395,22 @@ def explain_decisions(run_id: Optional[str], raw_dir: Optional[str],
                 + (f" {clipped_rows} row(s) hit the [-1, 1] clip, where the "
                    "components legitimately do not sum to the final value."
                    if clipped_rows else "")
+            ),
+        },
+        "q_value_reconciliation": {
+            "checked": q_checked,
+            "agree": q_agree,
+            "disagree": q_disagree,
+            "ok": q_disagree == 0,
+            "note": (
+                "For every step with a logged Q-value row, the action with "
+                "the highest Q-value among those the controller marked "
+                "allowed is compared with the greedy_action the controller "
+                "recorded independently. They should always agree."
+                if q_checked else
+                "No step in this run has a logged Q-value row -- either it "
+                "predates the instrumentation, or this is variant A, which "
+                "has no agent."
             ),
         },
     }

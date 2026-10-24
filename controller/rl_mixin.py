@@ -19,6 +19,7 @@ agent cannot be rewarded for something it did not do.
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Dict, Optional, Sequence, Tuple
 
@@ -117,11 +118,43 @@ class RlControllerMixin:
                 "q_before": round(record.q_before, 6),
                 "q_after": round(record.q_after, 6),
                 "td_error": round(record.td_error, 6),
-                "exploratory": int(was_exploratory),
-                "greedy_action": record.greedy_action,
             })
+            # was_exploratory/greedy above describe the action taken *last*
+            # interval (the one `reward` was just measured for), not the new
+            # decision chosen below. They are deliberately not written into
+            # extra["exploratory"]/extra["greedy_action"] here -- those two
+            # columns describe this row's own new decision (same row as
+            # "action"/"path"/"idle_timeout" and q_values_json below), set
+            # unconditionally once that decision is made. An earlier version
+            # of this method wrote them here too and relied on
+            # extra.setdefault() below to avoid overwriting them, which meant
+            # every row with step > 0 recorded the *previous* decision's
+            # exploratory/greedy_action under the current row's action --
+            # an off-by-one mislabelling, not a behaviour change (nothing
+            # about action selection or learning read these two keys back).
 
         # ---- 3: choose the action for the coming interval ------------------
+        # Record the full Q-value row and the allowed subset *before*
+        # selection, exactly as select_action() will read them. q_row() and
+        # restrict() are both pure reads -- q_row() does lazily create the
+        # state's row in the table if this is the first visit, but
+        # select_action() would trigger that same lazy-init itself a moment
+        # later, so capturing it here first changes nothing about what the
+        # agent does or which action it picks. This is logging, not behaviour:
+        # see tests/test_decision_journey.py::test_instrumentation_does_not_
+        # change_the_action_sequence for the regression test that checks it.
+        q_row_before = self.agent.q_row(state)
+        allowed_now = self.action_space.restrict(
+            list(self.action_space.actions), usable_paths
+        )
+        # Order matters here and must NOT be alphabetised: greedy_action()
+        # breaks ties by keeping the first action in this exact sequence with
+        # a strictly-greater value (see agent/qlearning.py), so a consumer
+        # recomputing the argmax from this list must iterate it in the same
+        # order to land on the same action when values are tied -- which they
+        # are on every state's first visit, when the whole row is 0.0.
+        allowed_keys = [self.action_space.encode(a) for a in allowed_now]
+
         action, exploratory, greedy = self.agent.select_action(state, usable_paths)
         self._pending = (state, action, exploratory, greedy)
 
@@ -129,10 +162,14 @@ class RlControllerMixin:
         path = self.action_space.path_of(effective)
         idle = self.action_space.idle_timeout_of(effective)
 
-        extra.setdefault("exploratory", int(exploratory))
-        extra.setdefault("greedy_action", self.action_space.encode(greedy))
+        extra["exploratory"] = int(exploratory)
+        extra["greedy_action"] = self.action_space.encode(greedy)
         extra["epsilon"] = round(self.agent.epsilon, 6)
         extra["action"] = self.action_space.encode(action)
+        extra["q_values_json"] = json.dumps({
+            "values": {k: round(v, 6) for k, v in sorted(q_row_before.items())},
+            "allowed": allowed_keys,
+        }, sort_keys=True)
         return path, idle, extra
 
     def on_shutdown(self) -> None:

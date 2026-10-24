@@ -430,6 +430,14 @@ DECISION_FIELDS = (
     "exploratory", "greedy_action", "epsilon", "reward", "q_before", "q_after",
     "td_error", "usable_paths",
     "r_throughput", "r_utilisation", "r_loss", "r_occupancy", "r_controller_msgs",
+    # Full Q-value row for every action in the space, as it stood *before*
+    # this step's action was chosen, plus which of those actions were allowed
+    # (a failed link can make some paths unavailable). JSON-encoded because it
+    # is a dict, not a scalar. Added by controller/rl_mixin.py; absent on runs
+    # recorded before this instrumentation existed (variant A always, since it
+    # has no agent) -- readers must treat a missing/empty value as "not
+    # recorded", never as zero or as an invented value.
+    "q_values_json",
 )
 EVENT_FIELDS = ("t", "kind", "detail")
 

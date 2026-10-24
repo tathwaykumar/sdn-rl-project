@@ -145,6 +145,9 @@ export interface TopologyPayload {
     utilisation_interval_s?: number | null;
     active_paths?: ActivePaths;
     age_s?: number | null;
+    host_traffic_available?: boolean;
+    host_traffic_reason?: string | null;
+    hosts?: Record<string, HostTraffic>;
   };
 }
 
@@ -186,6 +189,14 @@ export interface FlowTablePayload {
   note?: string;
 }
 
+/** The full Q-value row at the moment one action was chosen, logged before
+ * selection. Absent (null) on runs recorded before this instrumentation
+ * existed -- that must render as "not recorded", never as zero. */
+export interface QValueRow {
+  values: Record<string, number>;
+  allowed: string[];
+}
+
 export interface Decision {
   t: number | null;
   step: number;
@@ -203,6 +214,31 @@ export interface Decision {
   greedy_action: string | null;
   usable_paths: string[];
   reward_terms: Record<string, number | null>;
+  q_values?: QValueRow | null;
+}
+
+/** Switch confirmation for one specific decision step (any step of any run,
+ * not only the latest live one). */
+export interface StepVerification {
+  available: boolean;
+  reason?: string;
+  source?: DataSource;
+  decision?: Decision;
+  status?: "confirmed" | "not_observed" | "no_later_dump" | "unverified";
+  detail?: string;
+  dump_t?: number | null;
+  lag_s?: number | null;
+  rule_counts?: Record<string, number>;
+}
+
+/** Per-host traffic counted at the switch's access port facing that host. */
+export interface HostTraffic {
+  received_bytes: number;
+  sent_bytes: number;
+  received_packets: number;
+  sent_packets: number;
+  receive_bps: number | null;
+  send_bps: number | null;
 }
 
 export interface DecodedState {
@@ -443,6 +479,14 @@ export interface RewardStep {
   q_before: number | null;
   q_after: number | null;
   td_error: number | null;
+  /** Full Q-value row before this step's action was chosen. Null means not
+   * recorded for this run (variant A, or a run predating instrumentation) --
+   * never fabricate alternatives when this is null. */
+  q_values?: QValueRow | null;
+  /** Argmax of q_values.values restricted to q_values.allowed, computed
+   * server-side. Present only when q_values is present. */
+  q_argmax?: string | null;
+  q_argmax_matches_greedy?: boolean | null;
 }
 
 export interface RewardExplain {
@@ -459,6 +503,13 @@ export interface RewardExplain {
     clipped_rows: number;
     worst_residual: number;
     tolerance: number;
+    ok: boolean;
+    note: string;
+  };
+  q_value_reconciliation?: {
+    checked: number;
+    agree: number;
+    disagree: number;
     ok: boolean;
     note: string;
   };

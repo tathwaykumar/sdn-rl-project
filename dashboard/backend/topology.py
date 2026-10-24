@@ -188,6 +188,93 @@ def link_utilisation(raw_dir: str) -> Dict[str, object]:
     }
 
 
+def host_traffic(raw_dir: str) -> Dict[str, object]:
+    """Per-host sent/received bytes, packets and throughput.
+
+    OpenFlow has no per-host counters; what exists is the switch's own
+    counters on the access port facing that host. The direction is easy to
+    get backwards, so it is spelled out here rather than left implicit:
+
+    * the switch's ``tx`` counter on that port is traffic the switch sent
+      *out to* the host -- i.e. what the host **received**;
+    * the switch's ``rx`` counter is traffic the switch received *from* the
+      host -- i.e. what the host **sent**.
+
+    Cumulative totals (bytes/packets) come straight from the latest sample,
+    since OpenFlow port counters are monotonic since switch start. Rates need
+    two samples and the same delta-with-reset-guard pattern as
+    ``link_utilisation``, so a single sample reports totals but no rate.
+    """
+    path = os.path.join(raw_dir, "raw_port_stats.csv")
+    rows = _read_csv_tail(path, limit=400)
+    if not rows:
+        return {"available": False, "reason": "no port statistics recorded yet"}
+
+    by_time: Dict[float, Dict[Tuple[str, int], Dict[str, float]]] = {}
+    for row in rows:
+        t = _to_float(row.get("t"))
+        switch = row.get("switch")
+        port = _to_float(row.get("port"))
+        tx_b = _to_float(row.get("tx_bytes"))
+        rx_b = _to_float(row.get("rx_bytes"))
+        tx_p = _to_float(row.get("tx_packets"))
+        rx_p = _to_float(row.get("rx_packets"))
+        if None in (t, switch, port, tx_b, rx_b, tx_p, rx_p):
+            continue
+        by_time.setdefault(t, {})[(switch, int(port))] = {
+            "tx_bytes": tx_b, "rx_bytes": rx_b, "tx_packets": tx_p, "rx_packets": rx_p,
+        }
+
+    times = sorted(by_time)
+    if not times:
+        return {"available": False, "reason": "no usable port-counter rows"}
+
+    t_now = times[-1]
+    now = by_time[t_now]
+    prev = by_time[times[-2]] if len(times) >= 2 else None
+    dt = (t_now - times[-2]) if prev else None
+
+    hosts: Dict[str, Dict[str, object]] = {}
+    for host in spec.HOSTS:
+        key = (host.switch, host.port)
+        cur = now.get(key)
+        if cur is None:
+            continue
+        entry: Dict[str, object] = {
+            "received_bytes": cur["tx_bytes"],   # switch tx -> host received
+            "sent_bytes": cur["rx_bytes"],        # switch rx -> host sent
+            "received_packets": cur["tx_packets"],
+            "sent_packets": cur["rx_packets"],
+            "receive_bps": None,
+            "send_bps": None,
+        }
+        if prev is not None and dt and dt > 0:
+            old = prev.get(key)
+            if old is not None:
+                d_tx = cur["tx_bytes"] - old["tx_bytes"]
+                d_rx = cur["rx_bytes"] - old["rx_bytes"]
+                if d_tx >= 0:
+                    entry["receive_bps"] = d_tx * 8.0 / dt
+                if d_rx >= 0:
+                    entry["send_bps"] = d_rx * 8.0 / dt
+        hosts[host.name] = entry
+
+    return {
+        "available": bool(hosts),
+        "reason": None if hosts else "no access-port counters matched a known host",
+        "source": DataSource.LIVE.value,
+        "t": t_now,
+        "interval_s": dt,
+        "age_s": file_age_s(path),
+        "hosts": hosts,
+        "note": (
+            "Counted at the switch's access port facing each host: 'received' "
+            "is the switch's tx counter (switch -> host), 'sent' is the "
+            "switch's rx counter (host -> switch)."
+        ),
+    }
+
+
 # --------------------------------------------------------------------------
 # Combined live view
 # --------------------------------------------------------------------------
@@ -208,6 +295,7 @@ def topology_state(raw_dir: Optional[str], live: bool) -> Dict[str, object]:
     states = link_states_from_events(raw_dir)
     utilisation = link_utilisation(raw_dir)
     paths = active_paths(raw_dir)
+    traffic = host_traffic(raw_dir)
 
     link_state: Dict[str, Dict[str, object]] = {}
     for link in topo["links"]:
@@ -236,5 +324,8 @@ def topology_state(raw_dir: Optional[str], live: bool) -> Dict[str, object]:
         "utilisation_interval_s": utilisation.get("interval_s"),
         "active_paths": paths,
         "age_s": utilisation.get("age_s"),
+        "host_traffic_available": traffic.get("available", False),
+        "host_traffic_reason": traffic.get("reason"),
+        "hosts": traffic.get("hosts", {}),
     }
     return topo

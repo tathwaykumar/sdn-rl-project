@@ -228,6 +228,31 @@ def rl_verification(run_id: Optional[str] = Query(None)) -> Dict[str, object]:
     return payload
 
 
+@app.get("/api/rl/step-verification")
+def rl_step_verification(step: int = Query(..., ge=0),
+                         run_id: Optional[str] = Query(None)) -> Dict[str, object]:
+    """Switch confirmation for one specific recorded decision, by step index.
+
+    Unlike /api/rl/verification (which only ever answers for the latest
+    decision), this lets the Decision Journey check any step of any run --
+    including a finished historical one -- against the flow-table dump that
+    was actually taken after it, never one that merely predates it.
+    """
+    if is_mock():
+        decisions = mock.mock_decisions(step + 1)
+        return {"available": True, "source": DataSource.MOCK.value,
+                "decision": decisions[-1], "status": "confirmed",
+                "detail": "MOCK DATA - no switch was consulted."}
+    raw_dir, live = _resolve_raw_dir(run_id)
+    if raw_dir is None:
+        return {"available": False, "source": DataSource.UNAVAILABLE.value,
+                "reason": "no experiment running and no run selected"}
+    payload = telemetry.verify_decision_at(raw_dir, step)
+    if payload.get("available"):
+        payload["source"] = DataSource.LIVE.value if live else DataSource.HISTORICAL.value
+    return payload
+
+
 # ------------------------------------------------------------------- metrics
 @app.get("/api/metrics/live")
 def metrics_live(run_id: Optional[str] = Query(None)) -> Dict[str, object]:

@@ -13,6 +13,7 @@ switch was holding, and there would be no way to tell which was right.
 from __future__ import annotations
 
 import csv
+import json
 import os
 import re
 import sys
@@ -296,8 +297,36 @@ def read_decisions(raw_dir: str, limit: int = 60) -> List[Dict[str, object]]:
                 "occupancy": _to_float(row.get("r_occupancy")),
                 "controller_msgs": _to_float(row.get("r_controller_msgs")),
             },
+            "q_values": _parse_q_values(row.get("q_values_json")),
         })
     return out
+
+
+def _parse_q_values(raw: Optional[str]) -> Optional[Dict[str, object]]:
+    """Decode the logged Q-value row, or None if it was never recorded.
+
+    Missing is reported as missing. The whole 60-run primary matrix and the
+    nine control runs were recorded before this instrumentation existed, and
+    this function must not paper over that with an empty dict that looks
+    measured -- a caller checking ``is None`` sees the real distinction
+    between "not recorded" and "recorded as empty".
+    """
+    if not raw:
+        return None
+    try:
+        payload = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    values = payload.get("values")
+    allowed = payload.get("allowed")
+    if not isinstance(values, dict) or not isinstance(allowed, list):
+        return None
+    return {
+        "values": {str(k): float(v) for k, v in values.items()},
+        "allowed": [str(a) for a in allowed],
+    }
 
 
 def decode_state(state: str) -> Dict[str, object]:
@@ -609,4 +638,89 @@ def decision_vs_installed(raw_dir: str) -> Dict[str, object]:
         "status": status,
         "detail": detail,
         "lag_s": (dump_t - decision_t) if (dump_t and decision_t) else None,
+    }
+
+
+def _path_rule_counts(dump: "object") -> Dict[str, int]:
+    """Routed rules per path in one flow dump, by egress port at the edges."""
+    counts: Dict[str, int] = {"A": 0, "B": 0}
+    for rule in dump.rules:  # type: ignore[attr-defined]
+        if classify_rule(rule) != "routed" or rule.output is None:
+            continue
+        try:
+            port = int(rule.output)
+        except (TypeError, ValueError):
+            continue
+        name = EDGE_PORT_TO_PATH.get((rule.switch, port))
+        if name:
+            counts[name] += 1
+    return counts
+
+
+def verify_decision_at(raw_dir: str, step: int) -> Dict[str, object]:
+    """Switch confirmation for one specific, arbitrary decision step.
+
+    ``decision_vs_installed`` above answers this only for the *latest*
+    decision in a live run. The Decision Journey lets a viewer step through
+    *any* recorded decision -- including ones from a finished, historical run
+    -- and each one needs the same honest treatment: confirmed only by a flow
+    dump taken strictly after it, never by a dump that merely happens to show
+    rules on the right path because an earlier decision put them there.
+    """
+    decisions = read_decisions(raw_dir, limit=100000)
+    match = next((d for d in decisions if d.get("step") == step), None)
+    if match is None:
+        return {"available": False, "reason": f"no decision recorded at step {step}"}
+
+    decision_t = match.get("t")
+    chosen = match.get("path")
+    if decision_t is None or not chosen:
+        return {"available": False, "reason": "decision has no timestamp or path"}
+
+    dumps: List[Tuple[float, str]] = []
+    for dump_path in list_flow_dumps(raw_dir):
+        try:
+            dump = parse_flow_dump(dump_path)
+        except OSError:
+            continue
+        if not dump.rules:
+            continue
+        dumps.append((dump.t, dump_path))
+
+    # The first dump at or after the decision's timestamp is the one that can
+    # confirm it. Dumps are usually already time-ordered by filename, but sort
+    # explicitly rather than assume it.
+    dumps.sort(key=lambda pair: pair[0])
+    confirming = next((p for t, p in dumps if t >= decision_t), None)
+
+    if confirming is None:
+        return {
+            "available": True,
+            "decision": match,
+            "status": "no_later_dump",
+            "detail": (
+                "No flow dump was taken after this decision before the run "
+                "ended, so it cannot be confirmed from switch evidence."
+            ),
+        }
+
+    dump = parse_flow_dump(confirming)
+    counts = _path_rule_counts(dump)
+    present = counts.get(chosen, 0)
+    status = "confirmed" if present > 0 else "not_observed"
+    detail = (
+        f"{present} rule(s) on path {chosen} found in the flow dump taken at "
+        f"{dump.t:.1f}s (this decision was made at {decision_t:.1f}s)."
+        if present else
+        f"No rules on path {chosen} were found in the flow dump taken at "
+        f"{dump.t:.1f}s, the first one after this decision."
+    )
+    return {
+        "available": True,
+        "decision": match,
+        "status": status,
+        "detail": detail,
+        "dump_t": dump.t,
+        "lag_s": dump.t - decision_t,
+        "rule_counts": counts,
     }
