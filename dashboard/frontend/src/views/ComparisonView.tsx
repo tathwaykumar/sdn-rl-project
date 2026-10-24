@@ -8,12 +8,18 @@
  * overlap; otherwise it reads "not distinguishable at this sample size", which
  * is not the same as "no difference" and is not dressed up as significance.
  */
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import {
+  Bar, BarChart, CartesianGrid, Cell as RCell, ErrorBar, LabelList,
+  ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from "recharts";
 import { api, downloadUrls } from "../api/client";
 import { useAsync } from "../hooks/useLive";
-import type { ComparisonPayload, DeltaInfo, StatSummary } from "../api/types";
+import type {
+  ComparisonPayload, DeltaInfo, MetricInfo, StatSummary,
+} from "../api/types";
 import {
-  Card, Empty, ErrorBox, Pill, Skeleton, SourceBadge, VARIANT_COLOR,
+  Card, Details, Empty, ErrorBox, Pill, Skeleton, SourceBadge, VARIANT_COLOR,
   VARIANT_LABEL, fmtNumber, inputClass, inputStyle,
 } from "../components/ui";
 
@@ -74,6 +80,7 @@ export function ComparisonView() {
 
   return (
     <div className="flex flex-col gap-4">
+      <HeadlineChart data={data} metrics={metrics} baseline={baseline} />
       <Card
         title="Comparison settings"
         right={<SourceBadge source={data.source} />}
@@ -127,13 +134,17 @@ export function ComparisonView() {
         </div>
       </Card>
 
+      <Card
+        title="Full numeric tables"
+        subtitle="Every metric, every variant. Median across seeds [IQR]; the charts above read from the same figures."
+      >
+        <Details summary={`Show all ${metrics.length} metrics across ${data.workloads.length} workloads`}>
+          <div className="flex flex-col gap-4 mt-1">
       {data.workloads.map((workload) => (
-        <Card
-          key={workload}
-          title={`Workload: ${workload}`}
-          subtitle={`Median across seeds [IQR]; baseline is variant ${baseline}`}
-          bodyClassName="p-0"
-        >
+        <div key={workload}>
+          <p className="t-label mb-1.5" style={{ color: "var(--accent)" }}>
+            Workload: {workload}
+          </p>
           <div className="overflow-auto">
             <table className="w-full text-[11px]">
               <thead style={{ background: "var(--surface-2)" }}>
@@ -185,8 +196,11 @@ export function ComparisonView() {
               </tbody>
             </table>
           </div>
-        </Card>
+        </div>
       ))}
+          </div>
+        </Details>
+      </Card>
 
       <Card title="Seed coverage" subtitle="Which seeds produced a usable run in each cell">
         <div className="overflow-auto">
@@ -233,6 +247,270 @@ export function ComparisonView() {
           </div>
         </Card>
       )}
+    </div>
+  );
+}
+
+/** The page's lead: one metric, every workload, every variant, with the
+ * uncertainty drawn rather than parenthesised.
+ *
+ * Bars are the mean across seeds and the whiskers are the 95% confidence
+ * interval — the same interval the backend's verdict logic tests for overlap,
+ * so a reader can see for themselves why a difference was or was not called
+ * real. The verdict matrix underneath states that conclusion in words.
+ *
+ * Deliberately *not* done here: no bar is drawn for a cell with no
+ * observations, no interval is drawn when the backend could not form one
+ * (n < 2), and nothing is interpolated across missing seeds.
+ */
+function HeadlineChart({
+  data, metrics, baseline,
+}: {
+  data: ComparisonPayload;
+  metrics: MetricInfo[];
+  baseline: string;
+}) {
+  // Throughput first if present: it is the metric the project leads with.
+  const [metricKey, setMetricKey] = useState(
+    () => (metrics.find((m) => m.key === "throughput_of_bps") ?? metrics[0])?.key ?? "",
+  );
+  const metric = data.metric_info[metricKey];
+
+  const rows = useMemo(() => {
+    if (!metric) return [];
+    return data.workloads.map((workload) => {
+      const row: Record<string, number | string | [number, number] | null> = {
+        workload,
+      };
+      for (const v of data.variants) {
+        const s: StatSummary | undefined = data.cells[workload]?.[v]?.metrics[metric.key];
+        if (!s || s.n === 0 || s.mean === null) {
+          row[v] = null;
+          row[`${v}_err`] = null;
+          continue;
+        }
+        const mean = s.mean / metric.scale;
+        row[v] = mean;
+        // Recharts reads ErrorBar values as offsets either side of the bar.
+        // Absent when the backend could not form an interval.
+        row[`${v}_err`] =
+          s.ci95_low !== null && s.ci95_high !== null
+            ? [mean - s.ci95_low / metric.scale, s.ci95_high / metric.scale - mean]
+            : null;
+        row[`${v}_n`] = s.n;
+        row[`${v}_median`] = s.median !== null ? s.median / metric.scale : null;
+        row[`${v}_iqr`] = s.iqr !== null ? s.iqr / metric.scale : null;
+      }
+      return row;
+    });
+  }, [data, metric]);
+
+  if (!metric) return null;
+
+  const anyData = rows.some((r) => data.variants.some((v) => r[v] !== null));
+
+  return (
+    <Card
+      title="Variant comparison"
+      subtitle={
+        `${metric.label}${metric.unit ? ` (${metric.unit})` : ""} — bars are the mean `
+        + "across seeds, whiskers the 95% confidence interval. "
+        + (metric.lower_is_better ? "Lower is better." : "Higher is better.")
+      }
+      accent="rl"
+      right={
+        <label className="flex items-center gap-2">
+          <span className="t-micro" style={{ color: "var(--text-4)" }}>METRIC</span>
+          <select
+            value={metricKey}
+            onChange={(e) => setMetricKey(e.target.value)}
+            className={inputClass}
+            style={inputStyle}
+          >
+            {metrics.map((m) => (
+              <option key={m.key} value={m.key}>{m.label}</option>
+            ))}
+          </select>
+        </label>
+      }
+    >
+      {!anyData ? (
+        <Empty
+          title="This metric was not measured in any cell"
+          detail="Nothing is plotted rather than plotting zero, because zero would itself be a measurement."
+        />
+      ) : (
+        <>
+          <div style={{ height: 268 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={rows} margin={{ top: 10, right: 8, bottom: 4, left: -10 }}
+                        barGap={2} barCategoryGap="22%">
+                <CartesianGrid stroke="var(--border-1)" strokeDasharray="2 5" vertical={false} />
+                <XAxis
+                  dataKey="workload" tick={{ fontSize: 11 }} tickLine={false}
+                  axisLine={{ stroke: "var(--border-1)" }}
+                />
+                <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                <Tooltip
+                  cursor={{ fill: "rgba(34,228,255,0.04)" }}
+                  contentStyle={{
+                    background: "var(--glass-strong)",
+                    border: "1px solid var(--border-2)",
+                    borderRadius: 8, fontSize: 11,
+                  }}
+                  formatter={(value: number, name: string, p) => {
+                    const d = p.payload as Record<string, unknown>;
+                    const n = d[`${name}_n`] as number | undefined;
+                    const med = d[`${name}_median`] as number | null | undefined;
+                    const iqr = d[`${name}_iqr`] as number | null | undefined;
+                    return [
+                      `mean ${fmtNumber(value, metric.digits)}`
+                      + (med != null ? ` · median ${fmtNumber(med, metric.digits)}` : "")
+                      + (iqr != null ? ` [IQR ${fmtNumber(iqr, metric.digits)}]` : "")
+                      + (n != null ? ` · n=${n}` : ""),
+                      `Variant ${name}`,
+                    ];
+                  }}
+                />
+                {data.variants.map((v) => (
+                  <Bar
+                    key={v} dataKey={v} name={v} fill={VARIANT_COLOR[v]}
+                    radius={[3, 3, 0, 0]} isAnimationActive={false}
+                  >
+                    {/* 2px surface gap keeps adjacent bars from fusing. */}
+                    {rows.map((_, i) => (
+                      <RCell key={i} stroke="var(--surface-0)" strokeWidth={2} />
+                    ))}
+                    <ErrorBar
+                      dataKey={`${v}_err`} width={5} strokeWidth={1.4}
+                      stroke="var(--text-2)"
+                    />
+                    {data.workloads.length <= 4 && (
+                      <LabelList
+                        dataKey={v} position="top" offset={8}
+                        formatter={(x: number) => fmtNumber(x, metric.digits)}
+                        style={{ fontSize: 9, fill: "var(--text-3)" }}
+                      />
+                    )}
+                  </Bar>
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 mt-1 mb-3">
+            {data.variants.map((v) => (
+              <span key={v} className="flex items-center gap-1.5 t-small">
+                <span
+                  className="w-2.5 h-2.5 rounded-sm shrink-0"
+                  style={{ background: VARIANT_COLOR[v] }}
+                  aria-hidden="true"
+                />
+                <span style={{ color: "var(--text-2)" }}>
+                  {v}
+                  {v === baseline && (
+                    <span style={{ color: "var(--text-4)" }}> · baseline</span>
+                  )}
+                </span>
+              </span>
+            ))}
+            <span className="flex items-center gap-1.5 t-small">
+              <span className="shrink-0" style={{ color: "var(--text-2)" }}>⊢⊣</span>
+              <span style={{ color: "var(--text-3)" }}>95% confidence interval</span>
+            </span>
+          </div>
+
+          <VerdictMatrix data={data} metric={metric} baseline={baseline} />
+        </>
+      )}
+    </Card>
+  );
+}
+
+/** The conclusion in words, for the metric on show.
+ *
+ * Reads straight from the backend's own verdicts so the page cannot disagree
+ * with the generated report. "Not distinguishable" is displayed as exactly
+ * that, never softened into a win.
+ */
+function VerdictMatrix({
+  data, metric, baseline,
+}: {
+  data: ComparisonPayload;
+  metric: MetricInfo;
+  baseline: string;
+}) {
+  const others = data.variants.filter((v) => v !== baseline);
+  if (!others.length) return null;
+
+  return (
+    <div className="pt-3 border-t" style={{ borderColor: "var(--border-1)" }}>
+      <p className="t-label mb-2" style={{ color: "var(--text-3)" }}>
+        Versus variant {baseline} — {metric.label}
+      </p>
+      <div className="overflow-auto">
+        <table className="w-full text-[11px]">
+          <thead>
+            <tr style={{ color: "var(--text-4)" }}>
+              <th className="px-2 py-1.5 text-left t-micro uppercase">Workload</th>
+              {others.map((v) => (
+                <th key={v} className="px-2 py-1.5 text-left t-micro uppercase">
+                  <span style={{ color: VARIANT_COLOR[v] }}>{v}</span> vs {baseline}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.workloads.map((w) => (
+              <tr key={w} className="border-t" style={{ borderColor: "var(--border-1)" }}>
+                <td className="px-2 py-1.5">{w}</td>
+                {others.map((v) => {
+                  const d: DeltaInfo | undefined = data.deltas[w]?.[v]?.[metric.key];
+                  const style = d?.verdict ? VERDICT_STYLE[d.verdict] : null;
+                  if (!d?.available || !style) {
+                    return (
+                      <td key={v} className="px-2 py-1.5" style={{ color: "var(--text-4)" }}>
+                        {d?.reason ?? "not measured"}
+                      </td>
+                    );
+                  }
+                  return (
+                    <td key={v} className="px-2 py-1.5">
+                      <span
+                        className="inline-flex items-center gap-1.5"
+                        title={d.detail}
+                      >
+                        <span
+                          className="w-1.5 h-1.5 rounded-full shrink-0"
+                          style={{
+                            background: style.color,
+                            boxShadow: d.verdict === "improved" || d.verdict === "regressed"
+                              ? `0 0 7px ${style.color}` : "none",
+                          }}
+                          aria-hidden="true"
+                        />
+                        {d.relative_change !== undefined && (
+                          <span className="num" style={{ color: style.color }}>
+                            {d.relative_change > 0 ? "+" : ""}
+                            {fmtNumber(d.relative_change * 100, 1)}%
+                          </span>
+                        )}
+                        <span style={{ color: "var(--text-3)" }}>{style.label}</span>
+                      </span>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="t-small mt-2 leading-relaxed" style={{ color: "var(--text-4)" }}>
+        A difference is called real only when the 95% intervals do not overlap.
+        &ldquo;Not distinguishable&rdquo; means the evidence at five seeds per
+        cell cannot separate them — it is not a finding of no difference, and a
+        percentage shown beside it is a direction, not a result.
+      </p>
     </div>
   );
 }

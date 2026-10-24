@@ -34,7 +34,9 @@ from analysis.aggregate import (  # noqa: E402
     METRICS, VARIANT_ORDER, WORKLOAD_ORDER, modal_duration, run_metrics,
     split_by_duration,
 )
-from analysis.parsers import is_diagnostic_run, load_run  # noqa: E402
+from analysis.parsers import (  # noqa: E402
+    is_diagnostic_run, is_primary_run, load_run,
+)
 from analysis.report import LOWER_IS_BETTER  # noqa: E402
 
 #: Metric key -> presentation metadata for the UI.
@@ -104,6 +106,16 @@ def collect_run_metrics(runs_dir: str = RUNS_DIR, window: str = "full",
         # scrambled, so they are not samples of a variant's normal behaviour
         # and must not enter the A/B/C comparison.
         if is_diagnostic_run(entry):
+            continue
+        # Ad-hoc runs launched from the dashboard are not extra samples of the
+        # controlled matrix. analysis.parsers.is_primary_run documents why:
+        # one was started with a seed the matrix already used, so pooling them
+        # double-counts that configuration, inflates n and understates the
+        # spread. The offline analysis has always filtered them; this page did
+        # not, which is why it could report n=8 for a cell the matrix defines
+        # as n=5 and disagree with the generated report it claims to match.
+        # They stay fully visible in History and are listed as excluded below.
+        if not is_primary_run(entry):
             continue
         run = load_run(path)
         if run is None:

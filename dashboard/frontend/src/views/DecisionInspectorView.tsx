@@ -11,11 +11,17 @@
  * action. Nothing here claims more than the recorded data supports.
  */
 import { useMemo, useState, type ReactNode } from "react";
+import {
+  Area, CartesianGrid, ComposedChart, Line, ReferenceArea, ReferenceLine,
+  ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from "recharts";
 import { api } from "../api/client";
 import { useAsync } from "../hooks/useLive";
-import type { Decision, LiveSnapshot, RewardExplain } from "../api/types";
+import type {
+  Decision, LiveSnapshot, MetricSeries, RewardExplain,
+} from "../api/types";
 import {
-  Card, Empty, ErrorBox, Pill, Skeleton, SourceBadge, cx,
+  Card, Details, Empty, ErrorBox, Pill, Skeleton, SourceBadge, cx,
   fmtNumber, fmtTime,
 } from "../components/ui";
 import { DecisionJourney } from "./DecisionJourney";
@@ -63,6 +69,12 @@ export function DecisionInspectorView({
     };
   }, [rows, selected]);
 
+  const series = useAsync<MetricSeries>(
+    () => api.metricsSeries(runId, 400),
+    [runId],
+    runId ? undefined : 6000,
+  );
+
   const rewardStep = useMemo(() => {
     if (!current || !rewardExplain.data?.steps) return undefined;
     return rewardExplain.data.steps.find((s) => s.step === current.step);
@@ -106,6 +118,13 @@ export function DecisionInspectorView({
           <strong>next</strong> time this situation comes up.
         </p>
       </Card>
+
+      <DecisionTimeline
+        decisions={rows}
+        series={series.data}
+        selectedStep={current?.step ?? null}
+        onSelect={setSelected}
+      />
 
       {current && (
         <DecisionJourney
@@ -177,6 +196,241 @@ export function DecisionInspectorView({
         </div>
       </Card>
     </div>
+  );
+}
+
+const PATH_COLOR: Record<string, string> = {
+  A: "var(--variant-a)",
+  B: "var(--variant-c)",
+};
+
+/** The run on one clock: which path the agent selected, against what the
+ * network was measured doing at the same moment.
+ *
+ * This is the join the console was missing. Decisions lived on this page,
+ * throughput and utilisation lived on the Metrics page, and nothing put them
+ * on a shared axis — so the obvious question ("the agent switched path here;
+ * what happened?") could not be asked of the data at all.
+ *
+ * The tinted bands are the agent's *selection*, which is an intention. They
+ * are not evidence that traffic took that path; per-decision confirmation
+ * against the switches' own flow tables is in the journey above. And because
+ * the workload and the network move on their own, alignment in time is not
+ * causation — the caption says so rather than letting the picture imply it.
+ */
+function DecisionTimeline({
+  decisions, series, selectedStep, onSelect,
+}: {
+  decisions: Decision[];
+  series?: MetricSeries | null;
+  selectedStep: number | null;
+  onSelect: (step: number) => void;
+}) {
+  const { points, bands, marks, hasUtil } = useMemo(() => {
+    const raw = (series?.points ?? []).filter(
+      (p) => (p as { valid?: boolean }).valid !== false,
+    ) as unknown as Record<string, number | null>[];
+
+    const withT = decisions.filter((d) => typeof d.t === "number");
+    const times = [
+      ...raw.map((p) => Number(p.t)),
+      ...withT.map((d) => d.t as number),
+    ].filter((n) => Number.isFinite(n));
+
+    if (!raw.length || !times.length) {
+      return { points: [], bands: [], marks: [], hasUtil: false };
+    }
+    const t0 = Math.min(...times);
+
+    const pts = raw.map((p) => ({
+      at: Number(p.t) - t0,
+      throughput: p.delivered_bps != null ? Number(p.delivered_bps) / 1e6 : null,
+      util: p.max_link_util != null ? Number(p.max_link_util) * 100 : null,
+    }));
+
+    // One band per contiguous run of the same selected path.
+    const ordered = [...withT].sort((a, b) => (a.t as number) - (b.t as number));
+    const end = Math.max(...pts.map((p) => p.at));
+    const segs: { from: number; to: number; path: string }[] = [];
+    ordered.forEach((d, i) => {
+      const from = (d.t as number) - t0;
+      const to = i + 1 < ordered.length
+        ? (ordered[i + 1].t as number) - t0
+        : end;
+      if (!d.path) return;
+      const last = segs[segs.length - 1];
+      if (last && last.path === d.path) last.to = to;
+      else segs.push({ from, to, path: d.path });
+    });
+
+    return {
+      points: pts,
+      bands: segs,
+      marks: ordered.map((d) => ({ step: d.step, at: (d.t as number) - t0, path: d.path })),
+      hasUtil: pts.some((p) => p.util !== null),
+    };
+  }, [decisions, series]);
+
+  if (!points.length) {
+    return (
+      <Card title="Decisions against the network" accent="net">
+        <Empty
+          title="No aligned telemetry for this run"
+          detail="This view needs both a decision log and an interval metric series recorded on the same clock."
+        />
+      </Card>
+    );
+  }
+
+  const selected = marks.find((m) => m.step === selectedStep);
+  const paths = [...new Set(bands.map((b) => b.path))];
+
+  return (
+    <Card
+      title="Decisions against the network"
+      subtitle="Each band is the path the agent selected; the curves are what was measured at the same moment"
+      accent="net"
+      bodyClassName="p-3"
+      right={<SourceBadge source={series?.source as never} />}
+    >
+      <div style={{ height: 224 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart
+            data={points}
+            margin={{ top: 8, right: 6, bottom: 2, left: -16 }}
+            onClick={(e) => {
+              // Clicking the run jumps the journey to the nearest decision.
+              const at = Number(
+                (e as { activeLabel?: number | string } | undefined)?.activeLabel,
+              );
+              if (!Number.isFinite(at) || !marks.length) return;
+              const nearest = marks.reduce((best, m) =>
+                Math.abs(m.at - at) < Math.abs(best.at - at) ? m : best,
+              );
+              onSelect(nearest.step);
+            }}
+          >
+            <CartesianGrid stroke="var(--border-1)" strokeDasharray="2 5" vertical={false} />
+            {bands.map((b, i) => (
+              <ReferenceArea
+                key={i} x1={b.from} x2={b.to} yAxisId="tp"
+                fill={PATH_COLOR[b.path] ?? "var(--idle)"} fillOpacity={0.11}
+                stroke="none" ifOverflow="extendDomain"
+              />
+            ))}
+            <XAxis
+              dataKey="at" type="number" tick={{ fontSize: 9.5 }} tickLine={false}
+              axisLine={{ stroke: "var(--border-1)" }}
+              domain={["dataMin", "dataMax"]} minTickGap={30}
+              tickFormatter={(v: number) => `${Math.round(v)}s`}
+            />
+            <YAxis
+              yAxisId="tp" tick={{ fontSize: 9.5 }} tickLine={false} axisLine={false}
+              width={42}
+            />
+            {hasUtil && (
+              <YAxis
+                yAxisId="u" orientation="right" domain={[0, 100]} width={32}
+                tick={{ fontSize: 9.5, fill: "var(--text-4)" }} tickLine={false}
+                axisLine={false}
+              />
+            )}
+            <Tooltip
+              contentStyle={{
+                background: "var(--glass-strong)", border: "1px solid var(--border-2)",
+                borderRadius: 8, fontSize: 11,
+              }}
+              labelFormatter={(v: number) => `${fmtNumber(v, 1)} s into the run`}
+              formatter={(value: number, name: string) => [
+                fmtNumber(value, name === "throughput" ? 2 : 1),
+                name === "throughput" ? "throughput (Mbit/s)" : "max link utilisation (%)",
+              ]}
+            />
+            <Area
+              yAxisId="tp" type="monotone" dataKey="throughput"
+              stroke="var(--accent)" strokeWidth={2} fill="var(--accent)"
+              fillOpacity={0.14} dot={false} isAnimationActive={false} connectNulls
+            />
+            {hasUtil && (
+              <Line
+                yAxisId="u" type="monotone" dataKey="util" stroke="var(--warn)"
+                strokeWidth={1.5} strokeDasharray="4 4" dot={false}
+                isAnimationActive={false} connectNulls
+              />
+            )}
+            {selected && (
+              <ReferenceLine
+                yAxisId="tp" x={selected.at} stroke="var(--rl)" strokeWidth={1.5}
+                label={{
+                  value: `step ${selected.step}`, position: "top",
+                  fontSize: 9, fill: "var(--rl)",
+                }}
+              />
+            )}
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 t-small">
+        {paths.map((p) => (
+          <span key={p} className="inline-flex items-center gap-1.5">
+            <span
+              className="w-3.5 h-2.5 rounded-sm shrink-0"
+              style={{
+                background: PATH_COLOR[p] ?? "var(--idle)",
+                opacity: 0.35,
+              }}
+              aria-hidden="true"
+            />
+            <span style={{ color: "var(--text-3)" }}>path {p} selected</span>
+          </span>
+        ))}
+        <span className="inline-flex items-center gap-1.5">
+          <span className="w-5 h-0.5 shrink-0" style={{ background: "var(--accent)" }}
+                aria-hidden="true" />
+          <span style={{ color: "var(--text-3)" }}>throughput, left axis</span>
+        </span>
+        {hasUtil && (
+          <span className="inline-flex items-center gap-1.5">
+            <span
+              className="w-5 h-0.5 shrink-0"
+              style={{
+                background:
+                  "repeating-linear-gradient(90deg, var(--warn) 0 4px, transparent 4px 7px)",
+              }}
+              aria-hidden="true"
+            />
+            <span style={{ color: "var(--text-3)" }}>max link utilisation, right axis</span>
+          </span>
+        )}
+        <span className="t-micro ml-auto" style={{ color: "var(--text-4)" }}>
+          click anywhere to inspect the nearest decision
+        </span>
+      </div>
+
+      <Details summary="What this shows, and what it cannot">
+        <ul className="space-y-1.5 leading-relaxed">
+          <li>
+            <strong>The bands are intent.</strong> They mark the path the agent
+            selected for each interval. Whether the switches actually carried
+            traffic that way is a separate question, answered per decision in
+            the journey above from the switches&rsquo; own flow tables.
+          </li>
+          <li>
+            <strong>Alignment is not causation.</strong> The workload and the
+            network change on their own, so throughput moving after a path
+            change is not evidence that the path change caused it. Use the
+            A/B/C Comparison page, which tests variants against a baseline
+            across seeds, for claims about effect.
+          </li>
+          <li>
+            <strong>Both series are measured.</strong> Throughput comes from the
+            edge switches&rsquo; egress counters and utilisation from per-link
+            counters, both on the same polling clock as the decisions.
+          </li>
+        </ul>
+      </Details>
+    </Card>
   );
 }
 

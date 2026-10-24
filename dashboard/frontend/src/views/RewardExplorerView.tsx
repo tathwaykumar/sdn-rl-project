@@ -11,8 +11,8 @@
  */
 import { useMemo, useState } from "react";
 import {
-  Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ReferenceLine,
-  ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Area, Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, LineChart,
+  ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { api } from "../api/client";
 import { useAsync } from "../hooks/useLive";
@@ -87,6 +87,7 @@ export function RewardExplorerView({ runId }: { runId?: string }) {
             selectedStep={current?.step ?? null}
             onSelect={(s) => setSelected(s)}
           />
+          <LearningDynamics steps={steps} />
           {current && <RewardWaterfall step={current} />}
           {current && <ContributionChart step={current} />}
         </div>
@@ -214,6 +215,288 @@ function RewardHistory({
         </ResponsiveContainer>
       </div>
     </Card>
+  );
+}
+
+/** Learning dynamics over the run.
+ *
+ * The question an RL project is always asked — "is the agent actually
+ * learning?" — had no chart anywhere in this console. Reward was plotted raw,
+ * per step, which is far too noisy to read a trend from, and the three signals
+ * that bear on the question were recorded but never drawn.
+ *
+ * Three series, each from the recorded decision log:
+ *   - reward, raw and as a rolling mean, so a trend is visible through noise;
+ *   - epsilon, the exploration rate, which *declines by configuration* and is
+ *     therefore context for the reward trend, not a result of it;
+ *   - |TD error|, how far each update moved its value estimate. This shrinking
+ *     is evidence the estimates are settling, which is a statement about the
+ *     table converging and not about the policy being good.
+ *
+ * What this deliberately does not say: that a rising reward proves a better
+ * policy. Reward also moves with the workload and the network, and the
+ * exploration rate is falling on a schedule the whole time, so the caption
+ * states the trend and stops there.
+ */
+function LearningDynamics({ steps }: { steps: RewardStep[] }) {
+  const WINDOW = 10;
+
+  const { rows, stats } = useMemo(() => {
+    const usable = steps.filter((s) => s.reward !== null);
+    const rewards = usable.map((s) => s.reward as number);
+
+    const rollingAt = (values: (number | null)[], i: number) => {
+      const from = Math.max(0, i - WINDOW + 1);
+      const slice = values.slice(from, i + 1).filter((v): v is number => v !== null);
+      if (!slice.length) return null;
+      return slice.reduce((a, b) => a + b, 0) / slice.length;
+    };
+
+    const absTd = usable.map((s) =>
+      s.td_error === null ? null : Math.abs(s.td_error),
+    );
+
+    const built = usable.map((s, i) => ({
+      step: s.step,
+      reward: s.reward as number,
+      rewardTrend: rollingAt(rewards, i),
+      epsilon: s.epsilon,
+      absTd: absTd[i],
+      absTdTrend: rollingAt(absTd, i),
+      // Plotted as its own series so exploratory steps are visible as points
+      // rather than inferred from the line.
+      exploreReward: s.exploratory ? (s.reward as number) : null,
+    }));
+
+    const explored = usable.filter((s) => s.exploratory === true).length;
+    const knownExplore = usable.filter((s) => s.exploratory !== null).length;
+
+    // First half vs second half of |TD error|, as a plain descriptive
+    // comparison of recorded values. No test is implied at this sample size.
+    const td = absTd.filter((v): v is number => v !== null);
+    const mid = Math.floor(td.length / 2);
+    const meanOf = (xs: number[]) =>
+      xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+
+    return {
+      rows: built,
+      stats: {
+        n: usable.length,
+        explored,
+        knownExplore,
+        epsFirst: built.find((r) => r.epsilon !== null)?.epsilon ?? null,
+        epsLast: [...built].reverse().find((r) => r.epsilon !== null)?.epsilon ?? null,
+        tdFirstHalf: meanOf(td.slice(0, mid)),
+        tdSecondHalf: meanOf(td.slice(mid)),
+      },
+    };
+  }, [steps]);
+
+  if (rows.length < 2) {
+    return (
+      <Card title="Learning dynamics" accent="rl">
+        <Empty
+          title="Not enough decisions recorded to show a trend"
+          detail="A trend needs at least two intervals with a recorded reward."
+        />
+      </Card>
+    );
+  }
+
+  const hasEpsilon = rows.some((r) => r.epsilon !== null);
+  const hasTd = rows.some((r) => r.absTd !== null);
+
+  return (
+    <Card
+      title="Learning dynamics"
+      subtitle={`${stats.n} decision intervals · reward with a ${WINDOW}-step rolling mean`}
+      accent="rl"
+      right={
+        stats.knownExplore > 0 ? (
+          <Pill color="var(--warn)" title="Steps where the agent took a random action instead of its current best.">
+            {fmtNumber((stats.explored / stats.knownExplore) * 100, 0)}% exploratory
+          </Pill>
+        ) : undefined
+      }
+    >
+      <div style={{ height: 212 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={rows} margin={{ top: 6, right: 4, bottom: 0, left: -16 }}>
+            <CartesianGrid stroke="var(--border-1)" strokeDasharray="2 5" vertical={false} />
+            <XAxis
+              dataKey="step" tick={{ fontSize: 9.5 }} tickLine={false}
+              axisLine={{ stroke: "var(--border-1)" }} minTickGap={26}
+            />
+            <YAxis
+              yAxisId="r" tick={{ fontSize: 9.5 }} tickLine={false} axisLine={false}
+              width={42} domain={[-1, 1]}
+            />
+            {hasEpsilon && (
+              <YAxis
+                yAxisId="e" orientation="right" domain={[0, 1]} width={30}
+                tick={{ fontSize: 9.5, fill: "var(--text-4)" }} tickLine={false}
+                axisLine={false}
+              />
+            )}
+            <ReferenceLine yAxisId="r" y={0} stroke="var(--border-3)" />
+            <Tooltip
+              contentStyle={{
+                background: "var(--glass-strong)", border: "1px solid var(--border-2)",
+                borderRadius: 8, fontSize: 11,
+              }}
+              labelFormatter={(v) => `Step ${v}`}
+              formatter={(value: number, name: string) => {
+                const labels: Record<string, string> = {
+                  reward: "reward (recorded)",
+                  rewardTrend: `reward, ${WINDOW}-step mean`,
+                  epsilon: "ε exploration rate (scheduled)",
+                  exploreReward: "exploratory step",
+                };
+                return [fmtNumber(value, 4), labels[name] ?? name];
+              }}
+            />
+            {/* Raw reward, kept faint: the trend line is what should be read. */}
+            <Line
+              yAxisId="r" type="linear" dataKey="reward" stroke="var(--rl)"
+              strokeWidth={1} strokeOpacity={0.3} dot={false} isAnimationActive={false}
+            />
+            <Area
+              yAxisId="r" type="monotone" dataKey="rewardTrend" stroke="var(--rl)"
+              strokeWidth={2.2} fill="var(--rl)" fillOpacity={0.12}
+              dot={false} isAnimationActive={false} connectNulls
+            />
+            {hasEpsilon && (
+              <Line
+                yAxisId="e" type="monotone" dataKey="epsilon" stroke="var(--warn)"
+                strokeWidth={1.6} strokeDasharray="4 4" dot={false}
+                isAnimationActive={false} connectNulls
+              />
+            )}
+            <Scatter
+              yAxisId="r" dataKey="exploreReward" fill="var(--warn)"
+              shape="circle" isAnimationActive={false} legendType="none"
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 t-small">
+        <Legend color="var(--rl)" label={`reward (${WINDOW}-step mean)`} />
+        <Legend color="var(--rl)" label="reward (per step)" faint />
+        {hasEpsilon && <Legend color="var(--warn)" label="ε, right axis" dashed />}
+        <Legend color="var(--warn)" label="exploratory step" dot />
+      </div>
+
+      {hasTd && (
+        <div className="mt-3 pt-3 border-t" style={{ borderColor: "var(--border-1)" }}>
+          <div className="flex items-baseline justify-between gap-3 mb-1">
+            <p className="t-label" style={{ color: "var(--text-3)" }}>
+              Value-estimate movement
+            </p>
+            <p className="t-small" style={{ color: "var(--text-4)" }}>
+              mean |TD error| {fmtNumber(stats.tdFirstHalf, 4)} → {fmtNumber(stats.tdSecondHalf, 4)}
+              <span className="ml-1">(first half → second half)</span>
+            </p>
+          </div>
+          <div style={{ height: 96 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: -16 }}>
+                <CartesianGrid stroke="var(--border-1)" strokeDasharray="2 5" vertical={false} />
+                <XAxis dataKey="step" tick={{ fontSize: 9 }} tickLine={false}
+                       axisLine={{ stroke: "var(--border-1)" }} minTickGap={26} />
+                <YAxis tick={{ fontSize: 9 }} tickLine={false} axisLine={false} width={42} />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--glass-strong)", border: "1px solid var(--border-2)",
+                    borderRadius: 8, fontSize: 11,
+                  }}
+                  labelFormatter={(v) => `Step ${v}`}
+                  formatter={(value: number, name: string) => [
+                    fmtNumber(value, 4),
+                    name === "absTdTrend" ? `|TD error|, ${WINDOW}-step mean` : "|TD error|",
+                  ]}
+                />
+                <Line type="linear" dataKey="absTd" stroke="var(--accent)" strokeWidth={1}
+                      strokeOpacity={0.28} dot={false} isAnimationActive={false} />
+                <Area type="monotone" dataKey="absTdTrend" stroke="var(--accent)"
+                      strokeWidth={2} fill="var(--accent)" fillOpacity={0.12}
+                      dot={false} isAnimationActive={false} connectNulls />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      <Details summary="How to read this, and what it does not show">
+        <ul className="space-y-1.5 leading-relaxed">
+          <li>
+            <strong>Reward trend.</strong> The solid band is a {WINDOW}-step
+            rolling mean of the rewards actually recorded; the faint line is the
+            raw per-step value. The mean is a smoothing of recorded numbers,
+            nothing more.
+          </li>
+          {hasEpsilon && (
+            <li>
+              <strong>ε is a schedule, not a result.</strong> It falls from{" "}
+              {fmtNumber(stats.epsFirst, 3)} to {fmtNumber(stats.epsLast, 3)}{" "}
+              across this run because the configuration decays it on a fixed
+              timetable. It is drawn here because exploration depresses reward
+              early on, so the reward trend has to be read against it.
+            </li>
+          )}
+          {hasTd && (
+            <li>
+              <strong>|TD error| is how far each update moved an estimate.</strong>{" "}
+              If it shrinks, the Q-table is settling. That means the value
+              estimates are converging — it is not by itself evidence that the
+              resulting policy routes traffic better.
+            </li>
+          )}
+          <li>
+            <strong>This chart cannot show causation.</strong> Reward depends on
+            the live network as well as the agent, so a rising trend is not
+            proof that the agent learned a better policy. The A/B/C Comparison
+            page is where variants are tested against a baseline with
+            confidence intervals.
+          </li>
+        </ul>
+      </Details>
+    </Card>
+  );
+}
+
+/** Small legend entry, matching the stroke style used in the chart. */
+function Legend({
+  color, label, dashed, faint, dot,
+}: {
+  color: string;
+  label: string;
+  dashed?: boolean;
+  faint?: boolean;
+  dot?: boolean;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {dot ? (
+        <span
+          className="w-2 h-2 rounded-full shrink-0"
+          style={{ background: color }}
+          aria-hidden="true"
+        />
+      ) : (
+        <span
+          className="w-5 h-0.5 shrink-0"
+          style={{
+            background: dashed
+              ? `repeating-linear-gradient(90deg, ${color} 0 4px, transparent 4px 7px)`
+              : color,
+            opacity: faint ? 0.35 : 1,
+          }}
+          aria-hidden="true"
+        />
+      )}
+      <span style={{ color: "var(--text-3)" }}>{label}</span>
+    </span>
   );
 }
 

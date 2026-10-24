@@ -536,6 +536,45 @@ def test_delta_unavailable_when_a_metric_is_missing():
     assert "missing" in delta["reason"]
 
 
+def test_comparison_excludes_adhoc_dashboard_runs(tmp_path, monkeypatch):
+    """The comparison page must sample only the controlled matrix.
+
+    Ad-hoc runs started from the dashboard carry a tag and are not extra
+    samples of a matrix cell -- analysis.parsers.is_primary_run documents why:
+    one was launched with a seed the matrix already used, so pooling them
+    double-counts that configuration, inflates n and understates the spread.
+
+    This is a regression test for a real divergence: the offline analysis
+    filtered these runs but this endpoint did not, so the page could report
+    n=8 for a cell the matrix defines as n=5 while claiming in its own
+    docstring to agree with the generated report by construction.
+    """
+    from dashboard.backend import comparison as comp
+
+    primary = "20260101-000000-A-heavy-seed1"
+    adhoc = "20260101-010000-A-heavy-seed1-ui"
+    demo = "20260101-020000-A-heavy-seed2-webdemo"
+    for name in (primary, adhoc, demo):
+        (tmp_path / name).mkdir()
+
+    loaded: list[str] = []
+
+    def fake_load_run(path):
+        loaded.append(os.path.basename(path))
+        return None  # the inclusion decision is all this test cares about
+
+    monkeypatch.setattr(comp, "load_run", fake_load_run)
+    # The cache is keyed on the directory and its mtime fingerprint, but clear
+    # it anyway so the assertion cannot be satisfied by an earlier call.
+    comp._CACHE.clear()
+
+    comp.collect_run_metrics(runs_dir=str(tmp_path), window="full")
+
+    assert loaded == [primary], (
+        f"only the matrix run should be considered, got {loaded}"
+    )
+
+
 def test_delta_guards_zero_baseline():
     delta = _delta(_summary(5, 0.0, -1.0, 1.0), _summary(5, 2.0, 1.0, 3.0), False)
     assert delta["available"] is False
