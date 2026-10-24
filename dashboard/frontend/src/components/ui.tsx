@@ -95,6 +95,9 @@ export function Card({
   children,
   className,
   bodyClassName,
+  accent,
+  raised,
+  icon,
 }: {
   title?: ReactNode;
   subtitle?: ReactNode;
@@ -102,34 +105,168 @@ export function Card({
   children: ReactNode;
   className?: string;
   bodyClassName?: string;
+  /** Domain rail on the leading edge: networking or reinforcement learning. */
+  accent?: "net" | "rl";
+  raised?: boolean;
+  icon?: ReactNode;
 }) {
   return (
-    <section className={cx("panel overflow-hidden flex flex-col", className)}>
+    <section
+      className={cx(
+        "panel overflow-hidden flex flex-col",
+        raised && "panel-raised",
+        accent === "net" && "rail-accent",
+        accent === "rl" && "rail-rl",
+        className,
+      )}
+    >
       {(title || right) && (
         <header
           className="flex items-start justify-between gap-3 px-4 py-3 border-b"
-          style={{ borderColor: "var(--border-1)" }}
+          style={{ borderColor: "var(--hairline)" }}
         >
-          <div className="min-w-0">
-            {title && (
-              <h2 className="text-[13px] font-semibold tracking-wide">
-                {title}
-              </h2>
-            )}
-            {subtitle && (
-              <p
-                className="text-[11px] mt-0.5 leading-snug"
-                style={{ color: "var(--text-3)" }}
+          <div className="min-w-0 flex items-start gap-2.5">
+            {icon && (
+              <span
+                className="shrink-0 mt-0.5"
+                style={{ color: accent === "rl" ? "var(--rl)" : "var(--accent)" }}
+                aria-hidden="true"
               >
-                {subtitle}
-              </p>
+                {icon}
+              </span>
             )}
+            <div className="min-w-0">
+              {title && <h2 className="t-h2">{title}</h2>}
+              {subtitle && (
+                <p className="t-small mt-0.5" style={{ color: "var(--text-3)" }}>
+                  {subtitle}
+                </p>
+              )}
+            </div>
           </div>
           {right && <div className="shrink-0">{right}</div>}
         </header>
       )}
       <div className={cx("p-4 flex-1 min-h-0", bodyClassName)}>{children}</div>
     </section>
+  );
+}
+
+/** A page-level section heading, for grouping panels without nesting cards. */
+export function SectionTitle({
+  children,
+  right,
+  hint,
+}: {
+  children: ReactNode;
+  right?: ReactNode;
+  hint?: string;
+}) {
+  return (
+    <div className="flex items-end justify-between gap-3 mb-2.5 mt-1">
+      <div className="min-w-0">
+        <h2 className="t-label" style={{ color: "var(--text-3)" }}>
+          {children}
+        </h2>
+        {hint && (
+          <p className="t-small mt-0.5" style={{ color: "var(--text-4)" }}>
+            {hint}
+          </p>
+        )}
+      </div>
+      {right}
+    </div>
+  );
+}
+
+/** Large headline metric for the Overview. Bigger type, more breathing room. */
+export function HeroMetric({
+  label,
+  value,
+  unit,
+  sub,
+  tone,
+  direction,
+  source,
+  spark,
+  explain,
+}: {
+  label: string;
+  value: ReactNode;
+  unit?: string;
+  sub?: ReactNode;
+  tone?: "ok" | "warn" | "bad";
+  direction?: string;
+  source?: DataSource | string | null;
+  /** Normalised 0..1 values for a background sparkline. */
+  spark?: number[];
+  explain?: string;
+}) {
+  const unavailable = value === "N/A" || value === "—";
+  const color = unavailable
+    ? "var(--text-4)"
+    : tone === "bad"
+      ? "var(--bad)"
+      : tone === "warn"
+        ? "var(--warn)"
+        : "var(--text-1)";
+
+  return (
+    <div
+      className="panel panel-hover relative overflow-hidden px-4 pt-3.5 pb-3 flex flex-col gap-1"
+      title={explain}
+    >
+      {spark && spark.length > 1 && (
+        <Sparkline values={spark} tone={tone} />
+      )}
+      <div className="flex items-start justify-between gap-2 relative">
+        <span className="t-small font-medium truncate" style={{ color: "var(--text-2)" }}>
+          {label}
+        </span>
+        {source && <SourceBadge source={source} />}
+      </div>
+      <div className="flex items-baseline gap-1.5 relative">
+        <span
+          className="num leading-none"
+          style={{ color, fontSize: 30, fontWeight: 640, letterSpacing: "-0.025em" }}
+        >
+          {value}
+        </span>
+        {unit && !unavailable && (
+          <span className="t-small" style={{ color: "var(--text-3)" }}>
+            {unit}
+          </span>
+        )}
+      </div>
+      <div className="flex items-center justify-between gap-2 relative mt-auto pt-1">
+        <span className="t-small truncate" style={{ color: "var(--text-3)" }}>
+          {sub}
+        </span>
+        <DirectionHint direction={direction} />
+      </div>
+    </div>
+  );
+}
+
+/** Background sparkline. Purely supportive: the number carries the meaning. */
+function Sparkline({ values, tone }: { values: number[]; tone?: string }) {
+  const max = Math.max(...values, 0.0001);
+  const pts = values
+    .map((v, i) => `${(i / (values.length - 1)) * 100},${34 - (v / max) * 30}`)
+    .join(" ");
+  const stroke =
+    tone === "bad" ? "var(--bad)" : tone === "warn" ? "var(--warn)" : "var(--accent)";
+  return (
+    <svg
+      className="absolute inset-x-0 bottom-0 w-full pointer-events-none"
+      height="38" viewBox="0 0 100 38" preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <polyline points={pts} fill="none" stroke={stroke} strokeWidth="1.2"
+                opacity="0.32" vectorEffect="non-scaling-stroke" />
+      <polyline points={`0,38 ${pts} 100,38`} fill={stroke} opacity="0.06"
+                stroke="none" />
+    </svg>
   );
 }
 

@@ -1,46 +1,54 @@
 @import "tailwindcss";
 
-/* ───────────────────────────────────────────────────────────────────────────
-   Design tokens — SDN Network Operations & RL Analytics Console
+/* ═══════════════════════════════════════════════════════════════════════════
+   SDN Network Intelligence Console — design system
 
-   Chrome is deep navy with cyan/electric-blue accents; purple is reserved for
-   reinforcement-learning surfaces so RL content is identifiable at a glance.
+   Chrome is midnight navy with layered surfaces. Cyan/blue carries networking
+   and telemetry; violet is reserved for reinforcement-learning concepts so RL
+   content is identifiable at a glance; green/amber/red are reserved for real
+   operational state and never used decoratively.
 
-   Data-series colours are a separate concern and deliberately do NOT follow
-   the chrome palette. Variants A/B/C use a colour-vision-deficiency-validated
-   categorical set, assigned by variant identity and never cycled, so dropping
-   a series from a chart never repaints the others. Re-tinting them to match
-   the UI would have broken that validation.
-
-   Green / amber / red are reserved for operational state and never used
-   decoratively.
-   ─────────────────────────────────────────────────────────────────────── */
+   Data-series colours are a separate system and deliberately do NOT follow the
+   chrome palette: variants A/B/C use a colour-vision-deficiency-validated
+   categorical set, assigned by variant identity and never cycled. Re-tinting
+   them to match the UI would have broken that validation.
+   ═══════════════════════════════════════════════════════════════════════════ */
 :root {
-  /* Surfaces: deep navy-charcoal, each step a little lifted */
-  --surface-0: #0b1119;
-  --surface-1: #111a25;
-  --surface-2: #17222f;
-  --surface-3: #1e2b3a;
-  --surface-4: #263548;
+  /* Surfaces — midnight navy, each step a measured lift */
+  --surface-0: #070c14;
+  --surface-1: #0d141f;
+  --surface-2: #131c2a;
+  --surface-3: #1a2534;
+  --surface-4: #223044;
+  --surface-5: #2b3b52;
 
-  --border-1: #22303f;
-  --border-2: #2e3f52;
-  --border-3: #3a4d63;
+  /* Glass: used only where layering aids reading, never as decoration */
+  --glass: rgba(19, 28, 42, 0.72);
+  --glass-strong: rgba(13, 20, 31, 0.88);
 
-  --text-1: #e6edf5;
-  --text-2: #9fb0c4;
-  --text-3: #6b7d93;
-  --text-4: #4c5c70;
+  --border-1: #1d2838;
+  --border-2: #27364a;
+  --border-3: #34475f;
+  --hairline: rgba(255, 255, 255, 0.045);
 
-  /* Accents */
-  --accent: #22d3ee;          /* cyan — primary interactive */
-  --accent-strong: #38bdf8;   /* electric blue */
-  --accent-dim: rgba(34, 211, 238, 0.12);
-  --accent-ring: rgba(34, 211, 238, 0.35);
+  --text-1: #eaf1f9;
+  --text-2: #a7b8cc;
+  --text-3: #71859c;
+  --text-4: #51637a;
 
-  /* Reinforcement-learning surfaces */
+  /* Networking / telemetry */
+  --accent: #22d3ee;
+  --accent-2: #38bdf8;
+  --accent-3: #0ea5e9;
+  --accent-dim: rgba(34, 211, 238, 0.11);
+  --accent-ring: rgba(34, 211, 238, 0.38);
+  --accent-glow: rgba(34, 211, 238, 0.18);
+
+  /* Reinforcement learning */
   --rl: #a78bfa;
+  --rl-2: #8b5cf6;
   --rl-dim: rgba(167, 139, 250, 0.12);
+  --rl-ring: rgba(167, 139, 250, 0.34);
 
   /* Operational state only */
   --ok: #34d399;
@@ -49,19 +57,23 @@
   --warn-dim: rgba(251, 191, 36, 0.12);
   --bad: #f87171;
   --bad-dim: rgba(248, 113, 113, 0.12);
-  --idle: #475569;
+  --idle: #3f5168;
 
-  /* Data series — CVD-validated, identity-stable. Do not re-tint. */
+  /* Data series — CVD-validated. Do not re-tint. */
   --variant-a: #3987e5;
   --variant-b: #d95926;
   --variant-c: #199e70;
 
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-2: 0 4px 16px rgba(0, 0, 0, 0.35);
-  --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.45);
+  /* Elevation */
+  --e1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --e2: 0 2px 8px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.5);
+  --e3: 0 8px 24px rgba(0, 0, 0, 0.44), 0 2px 6px rgba(0, 0, 0, 0.4);
+  --e4: 0 20px 48px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.42);
 
-  --radius: 10px;
-  --radius-lg: 14px;
+  --r-sm: 8px;
+  --r: 12px;
+  --r-lg: 16px;
+  --r-xl: 20px;
 }
 
 html,
@@ -77,52 +89,142 @@ body {
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* A faint directional wash so large surfaces are not dead flat. */
+/* Ambient depth. Fixed so it does not travel with scroll. */
 #root {
   background-image:
-    radial-gradient(1200px 600px at 12% -8%, rgba(34, 211, 238, 0.05), transparent 60%),
-    radial-gradient(900px 500px at 100% 0%, rgba(99, 102, 241, 0.05), transparent 55%);
+    radial-gradient(1400px 700px at 8% -10%, rgba(34, 211, 238, 0.055), transparent 58%),
+    radial-gradient(1100px 620px at 102% -4%, rgba(139, 92, 246, 0.05), transparent 55%),
+    radial-gradient(900px 500px at 50% 108%, rgba(14, 165, 233, 0.035), transparent 60%);
   background-attachment: fixed;
 }
 
-/* Measurements use tabular figures so digits do not jitter as values update. */
+/* ── Type ramp ──────────────────────────────────────────────────────────── */
+.t-display {
+  font-size: 26px;
+  line-height: 1.15;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.t-h1 {
+  font-size: 18px;
+  line-height: 1.25;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+}
+.t-h2 {
+  font-size: 14px;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+.t-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.t-body {
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.t-small {
+  font-size: 11px;
+  line-height: 1.5;
+}
+.t-micro {
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 .num {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
 }
-
 .mono {
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
     "Liberation Mono", monospace;
 }
-
 .text-balance {
   text-wrap: balance;
 }
 
 /* ── Panels ─────────────────────────────────────────────────────────────── */
 .panel {
-  background: linear-gradient(180deg, var(--surface-1), var(--surface-0) 180%);
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.022), transparent 42%),
+    var(--surface-1);
   border: 1px solid var(--border-1);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-1);
+  border-radius: var(--r-lg);
+  box-shadow: var(--e2);
+}
+
+/* A one-pixel highlight along the top edge reads as a light source and keeps
+   stacked panels from flattening into one another. */
+.panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.085) 18%,
+    rgba(255, 255, 255, 0.085) 82%,
+    transparent
+  );
+  pointer-events: none;
+}
+
+.panel-raised {
+  box-shadow: var(--e3);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 38%),
+    var(--surface-1);
 }
 
 .panel-hover {
-  transition: border-color 160ms ease, box-shadow 160ms ease,
-    transform 160ms ease;
+  transition: border-color 180ms ease, box-shadow 180ms ease,
+    transform 180ms ease;
 }
 .panel-hover:hover {
   border-color: var(--border-2);
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--e3);
 }
 
-/* ── Focus: always visible, never removed ───────────────────────────────── */
+.panel-glass {
+  background: var(--glass);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid var(--hairline);
+}
+
+/* Accent rail on the leading edge, for panels that need to announce a domain. */
+.rail-accent::after,
+.rail-rl::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  pointer-events: none;
+}
+.rail-accent::after {
+  background: linear-gradient(180deg, var(--accent), transparent);
+}
+.rail-rl::after {
+  background: linear-gradient(180deg, var(--rl), transparent);
+}
+
+/* ── Focus: always visible ──────────────────────────────────────────────── */
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -131,8 +233,8 @@ body {
 
 /* ── Scrollbars ─────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 11px;
+  height: 11px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
@@ -140,10 +242,12 @@ body {
 ::-webkit-scrollbar-thumb {
   background: var(--border-2);
   border-radius: 999px;
-  border: 2px solid var(--surface-0);
+  border: 3px solid transparent;
+  background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--border-3);
+  background-clip: content-box;
 }
 
 /* ── React Flow ─────────────────────────────────────────────────────────── */
@@ -151,35 +255,43 @@ body {
   display: none;
 }
 .react-flow__edge-path {
-  transition: stroke 220ms ease, stroke-width 220ms ease;
+  transition: stroke 240ms ease, stroke-width 240ms ease;
 }
 .react-flow__controls {
-  box-shadow: var(--shadow-2) !important;
-  border-radius: 8px;
+  box-shadow: var(--e3) !important;
+  border-radius: 10px;
   overflow: hidden;
+  border: 1px solid var(--border-2);
 }
 .react-flow__controls-button {
   background: var(--surface-2) !important;
   border-bottom: 1px solid var(--border-1) !important;
   color: var(--text-2) !important;
+  width: 26px;
+  height: 26px;
 }
 .react-flow__controls-button:hover {
   background: var(--surface-3) !important;
+  color: var(--accent) !important;
 }
 .react-flow__controls-button svg {
   fill: currentColor;
 }
 
-/* Traffic animation. Only applied when real telemetry says a link is
-   carrying traffic — never to make an idle network look busy. */
+/* Packet-flow animation. Applied ONLY when telemetry says a link is carrying
+   traffic — never to make an idle network look busy. */
 @keyframes flow-dash {
   to {
-    stroke-dashoffset: -14;
+    stroke-dashoffset: -16;
   }
 }
 .edge-flowing {
-  stroke-dasharray: 5 5;
-  animation: flow-dash 900ms linear infinite;
+  stroke-dasharray: 5 6;
+  animation: flow-dash 1s linear infinite;
+}
+.edge-flowing-fast {
+  stroke-dasharray: 4 5;
+  animation: flow-dash 560ms linear infinite;
 }
 
 @keyframes breathe {
@@ -188,17 +300,17 @@ body {
     opacity: 1;
   }
   50% {
-    opacity: 0.4;
+    opacity: 0.35;
   }
 }
 .breathe {
-  animation: breathe 2.2s ease-in-out infinite;
+  animation: breathe 2.4s ease-in-out infinite;
 }
 
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -206,14 +318,41 @@ body {
   }
 }
 .rise {
-  animation: rise 220ms ease-out both;
+  animation: rise 240ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
 }
 
-/* Honour reduced-motion preferences: movement here is decorative. */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-3);
+  border-radius: 6px;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.05),
+    transparent
+  );
+  animation: shimmer 1.5s infinite;
+}
+
+/* Movement here is decorative; honour the preference. */
 @media (prefers-reduced-motion: reduce) {
   .edge-flowing,
+  .edge-flowing-fast,
   .breathe,
-  .rise {
+  .rise,
+  .skeleton::after {
     animation: none !important;
   }
   * {
@@ -226,8 +365,20 @@ body {
   fill: var(--text-3);
 }
 .recharts-default-tooltip {
-  background: var(--surface-2) !important;
+  background: var(--glass-strong) !important;
+  backdrop-filter: blur(10px);
   border: 1px solid var(--border-2) !important;
-  border-radius: 8px !important;
-  box-shadow: var(--shadow-2);
+  border-radius: 10px !important;
+  box-shadow: var(--e3);
+}
+.recharts-tooltip-label {
+  color: var(--text-3) !important;
+}
+
+/* Utility: hide scrollbar on horizontal rails while keeping it scrollable. */
+.no-sb {
+  scrollbar-width: none;
+}
+.no-sb::-webkit-scrollbar {
+  display: none;
 }

@@ -81,6 +81,19 @@ const ACTIVE_SNAPSHOT = {
     available: true, status: "confirmed" as const,
     detail: "18 rule(s) on path B are installed at the edge switches.",
   },
+  // The Overview's forwarding panel reads this; without it the panel
+  // correctly shows its empty state instead.
+  topology: {
+    available: true,
+    source: "live" as const,
+    link_state: {},
+    active_paths: {
+      available: true,
+      rule_counts: { A: 0, B: 18 },
+      dominant_path: "B",
+      total_edge_rules: 18,
+    },
+  },
   events: [{ t: 1_792_746_990, kind: "switch_connected", detail: "s1" }],
 };
 
@@ -136,9 +149,13 @@ describe("App", () => {
   it("states plainly when no experiment is running", async () => {
     render(<App />);
     await waitFor(() =>
-      expect(screen.getByText("No experiment running")).toBeInTheDocument(),
+      expect(screen.getAllByText(/No experiment running/).length)
+        .toBeGreaterThan(0),
     );
-    expect(screen.getByText(/No live telemetry/)).toBeInTheDocument();
+    // The headline says Idle, and the metrics read N/A rather than 0 —
+    // an unmeasured value must never render as a measurement.
+    expect(screen.getByText("Idle")).toBeInTheDocument();
+    expect(screen.getAllByText("N/A").length).toBeGreaterThan(0);
   });
 
   it("shows the running experiment and its live measurements", async () => {
@@ -150,32 +167,28 @@ describe("App", () => {
       socket.emit(ACTIVE_SNAPSHOT);
     });
 
-    // The run identity appears in the header pill.
-    expect(screen.getAllByText(/heavy · seed 1/).length).toBeGreaterThan(0);
-    // Live measurements reach the metric cards (9.9 Mbit/s, 88 rules).
+    // The run identity appears in the header pill and the status banner.
+    expect(screen.getAllByText(/heavy/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Experiment running/)).toBeInTheDocument();
+    // Live measurements reach the headline metrics (9.9 Mbit/s, 88 rules).
     expect(screen.getByText("9.90")).toBeInTheDocument();
     expect(screen.getByText("88")).toBeInTheDocument();
     // Latency comes from the host probe, not the controller.
     expect(screen.getByText("12.4")).toBeInTheDocument();
-    // And the decision's installation status is surfaced, not assumed.
-    expect(screen.getByText(/Confirmed on switches/)).toBeInTheDocument();
   });
 
-  it("marks a decision as awaiting confirmation until switches agree", async () => {
+  it("separates confirmed forwarding from agent intent on the Overview", async () => {
     render(<App />);
     const socket = SilentSocket.instances.at(-1)!;
     await act(async () => {
       socket.open();
-      socket.emit({
-        ...ACTIVE_SNAPSHOT,
-        verification: {
-          available: true,
-          status: "awaiting_confirmation",
-          detail: "The newest flow dump predates this decision.",
-        },
-      });
+      socket.emit(ACTIVE_SNAPSHOT);
     });
-    expect(screen.getByText(/Awaiting switch confirmation/)).toBeInTheDocument();
+    // The Overview reports what the switches hold, and says so explicitly.
+    expect(screen.getByText("Confirmed forwarding")).toBeInTheDocument();
+    expect(
+      screen.getByText(/only when rules for it exist on\s+the switches/),
+    ).toBeInTheDocument();
   });
 
   it("makes mock mode impossible to miss", async () => {

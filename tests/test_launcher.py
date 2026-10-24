@@ -193,9 +193,11 @@ def harmless_daemon(tmp_path, monkeypatch):
     thread = threading.Thread(target=d.serve_forever, daemon=True)
     thread.start()
 
-    deadline = time.time() + 10
-    while not os.path.exists(sock) and time.time() < deadline:
-        time.sleep(0.05)
+    # Wait for the daemon to be *listening*, not merely bound. The socket file
+    # appears at bind() time, so polling for the path let tests connect in the
+    # window before listen() and get refused -- which showed up as different
+    # tests failing on different runs.
+    assert d._ready.wait(10), "daemon did not start listening"
     assert os.path.exists(sock), "daemon did not create its socket"
 
     yield d, LauncherClient(socket_path=sock)

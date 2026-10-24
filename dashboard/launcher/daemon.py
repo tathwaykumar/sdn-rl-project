@@ -139,6 +139,11 @@ class LauncherDaemon:
         # from whoever asked it to stop. Running the teardown twice races on
         # the socket and on terminating the child, so it happens once.
         self._cleaned = threading.Event()
+        # Set once the socket is bound AND listening. The socket *file* appears
+        # at bind() time, so waiting for the path to exist is not enough: a
+        # client connecting between bind() and listen() is refused. Anything
+        # hosting this daemon should wait on this instead.
+        self._ready = threading.Event()
 
     # ------------------------------------------------------------- lifecycle
     def _prepare_socket(self) -> socket.socket:
@@ -180,6 +185,7 @@ class LauncherDaemon:
             pass
 
         self._server = self._prepare_socket()
+        self._ready.set()
         LOG.info("listening on %s (allow uid=%s gid=%s)",
                  self.socket_path, self.allow_uid, self.allow_gid)
 
