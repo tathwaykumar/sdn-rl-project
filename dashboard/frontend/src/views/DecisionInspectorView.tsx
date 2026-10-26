@@ -21,8 +21,8 @@ import type {
   Decision, LiveSnapshot, MetricSeries, RewardExplain,
 } from "../api/types";
 import {
-  Card, ChartLegend, Details, Empty, ErrorBox, Pill, Skeleton, SourceBadge, cx,
-  tooltipStyle,
+  AboutPanel, Card, ChartLegend, Details, Empty, ErrorBox, PATH_COLOR, Pill,
+  Skeleton, SourceBadge, StatusDot, cx, tooltipStyle,
   fmtNumber, fmtTime,
 } from "../components/ui";
 import { DecisionJourney } from "./DecisionJourney";
@@ -91,34 +91,54 @@ export function DecisionInspectorView({
       </Card>
     );
   }
+  const about = (
+    <AboutPanel
+      summary={
+        <>
+          Follow one decision through its full life cycle: what the agent{" "}
+          <strong>observed</strong>, what it <strong>chose</strong> and why
+          (greedy or exploring), whether the controller actually{" "}
+          <strong>applied</strong> it to the switches, what the network{" "}
+          <strong>measured</strong> afterward, how that became a{" "}
+          <strong>reward</strong>, and how the agent's knowledge{" "}
+          <strong>updated</strong> for next time — all read from recorded
+          data, never inferred.
+        </>
+      }
+      terms={[
+        { term: "Greedy", def: "The agent chose its current best-known action." },
+        { term: "Exploratory", def: "A random action instead, to keep learning." },
+        { term: "Q-value", def: "The agent's current estimate of an action's long-run value." },
+      ]}
+    />
+  );
+
   if (!rows.length) {
+    // One line rather than a full-height plate: see the same note in the
+    // Reward Explorer. Nothing is plotted, so nothing needs the room.
     return (
-      <Card title="Decision Inspector" right={<SourceBadge source="unavailable" />}>
-        <Empty
-          title="No decisions recorded"
-          detail={
-            decisions.data?.reason ??
-            "The agent records one decision per polling interval. Start an experiment, or open a completed run from History."
-          }
-        />
-      </Card>
+      <div className="space-y-4">
+        {about}
+        <div className="panel px-5 py-3.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <StatusDot tone="idle" />
+          <span className="t-body" style={{ color: "var(--text-2)" }}>
+            No decisions recorded
+          </span>
+          <span className="t-small" style={{ color: "var(--text-3)" }}>
+            {decisions.data?.reason ??
+              "The agent records one decision per polling interval. Start an experiment, or open a completed run from History."}
+          </span>
+          <span className="ml-auto shrink-0">
+            <SourceBadge source="unavailable" />
+          </span>
+        </div>
+      </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <Card accent="rl">
-        <p className="t-body text-balance" style={{ color: "var(--text-2)" }}>
-          Follow one decision through its full life cycle below: what the agent{" "}
-          <strong>observed</strong>, what it <strong>chose</strong> and why
-          (greedy or exploring), whether the controller actually{" "}
-          <strong>applied</strong> it to the switches, what the network{" "}
-          <strong>measured</strong> afterward, how that became a{" "}
-          <strong>reward</strong>, how the agent's knowledge{" "}
-          <strong>updated</strong>, and what that means for the{" "}
-          <strong>next</strong> time this situation comes up.
-        </p>
-      </Card>
+      {about}
 
       <DecisionTimeline
         decisions={rows}
@@ -169,7 +189,7 @@ export function DecisionInspectorView({
                     <td className="px-3 py-1.5 num">{fmtTime(d.t)}</td>
                     <td className="px-3 py-1.5 num">{d.step}</td>
                     <td className="px-3 py-1.5">
-                      <Pill color={d.path === "A" ? "var(--variant-a)" : "var(--variant-c)"}>
+                      <Pill color={PATH_COLOR[d.path] ?? "var(--idle)"}>
                         {d.path || "—"}
                       </Pill>
                     </td>
@@ -200,10 +220,6 @@ export function DecisionInspectorView({
   );
 }
 
-const PATH_COLOR: Record<string, string> = {
-  A: "var(--variant-a)",
-  B: "var(--variant-c)",
-};
 
 /** The run on one clock: which path the agent selected, against what the
  * network was measured doing at the same moment.
@@ -294,7 +310,7 @@ function DecisionTimeline({
       bodyClassName="p-3"
       right={<SourceBadge source={series?.source as never} />}
     >
-      <div style={{ height: 224 }}>
+      <div style={{ height: 264 }}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
             data={points}

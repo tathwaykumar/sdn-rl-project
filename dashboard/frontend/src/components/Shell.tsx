@@ -1,18 +1,16 @@
-/** Console chrome: icon rail, live telemetry strip, event ticker.
+/** Console chrome: a conventional top app bar and horizontal section nav.
  *
- * This is deliberately not a web page layout. There is no document column and
- * no header-and-sidebar furniture: the rail is a fixed instrument panel, the
- * top strip is a continuously updating readout, and the bottom strip is a
- * running event ticker. Content fills everything in between, edge to edge.
+ * The console used to be framed like an instrument panel: a fixed icon rail
+ * down the left edge, a continuously-updating strip across the top, and a
+ * running ticker along the bottom. That cost every page a rail's worth of
+ * width and put navigation in an unfamiliar place. This is an ordinary web
+ * app layout instead: a header (brand, live readouts, stream health) and a
+ * horizontal row of section tabs beneath it, both full width; the page below
+ * gets the entire window, capped at `--measure` for readability.
  *
- * Connection state and data provenance are always visible. A console that
- * keeps rendering the last frame after its stream dies is worse than one that
- * shows nothing, because stale numbers look exactly like current ones.
- *
- * Every moving element in here is either ambient (the beam under the top
- * strip, which carries no information) or driven by real telemetry (the
- * stream equaliser, the readout flash, the ticker). Nothing animates to
- * suggest activity that the data does not show.
+ * Connection state and data provenance are still always visible. A console
+ * that keeps rendering the last frame after its stream dies is worse than one
+ * that shows nothing, because stale numbers look exactly like current ones.
  */
 import { useEffect, useState, type ReactNode } from "react";
 import type { ConnectionState } from "../hooks/useLive";
@@ -26,7 +24,7 @@ export type PageId =
 export interface NavItem {
   id: PageId;
   label: string;
-  group: "Operations" | "Reinforcement learning" | "Experiments";
+  group: "Operations" | "Reinforcement learning" | "Runs";
   icon: ReactNode;
   hint: string;
 }
@@ -34,8 +32,8 @@ export interface NavItem {
 /** Inline SVG icons: no icon-font dependency, and they inherit currentColor. */
 const icon = (path: ReactNode) => (
   <svg
-    width="18" height="18" viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"
+    width="16" height="16" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
     strokeLinejoin="round" aria-hidden="true"
   >
     {path}
@@ -69,32 +67,25 @@ export const NAV_ITEMS: NavItem[] = [
     icon: icon(<><path d="M12 3v6M12 15v6M5.6 7.6l4.2 4.2M14.2 12.2l4.2 4.2" /><circle cx="12" cy="12" r="2.6" /></>),
   },
   {
-    id: "experiments", label: "Experiments", group: "Experiments",
+    id: "experiments", label: "Experiments", group: "Runs",
     hint: "Start, stop and monitor runs",
     icon: icon(<><path d="M9 3h6M10 3v6.2L5.3 18a2 2 0 0 0 1.7 3h10a2 2 0 0 0 1.7-3L14 9.2V3" /></>),
   },
   {
-    id: "comparison", label: "A/B/C Comparison", group: "Experiments",
+    id: "comparison", label: "A/B/C Comparison", group: "Runs",
     hint: "Did the agent beat fixed routing, and is the difference real?",
     icon: icon(<><path d="M4 20V9M12 20V4M20 20v-7" /><path d="M2 20h20" /></>),
   },
   {
-    id: "history", label: "History", group: "Experiments",
+    id: "history", label: "History", group: "Runs",
     hint: "Which runs produced these findings, and can they be traced?",
     icon: icon(<><path d="M3 12a9 9 0 1 0 2.6-6.4" /><path d="M3 4v5h5" /><path d="M12 7.5V12l3 1.8" /></>),
   },
 ];
 
 const GROUPS: NavItem["group"][] = [
-  "Operations", "Reinforcement learning", "Experiments",
+  "Operations", "Reinforcement learning", "Runs",
 ];
-
-/** Three-letter rail tag per group, so the rail stays narrow. */
-const GROUP_TAG: Record<NavItem["group"], string> = {
-  "Operations": "OPS",
-  "Reinforcement learning": "RL",
-  "Experiments": "EXP",
-};
 
 export function Shell({
   page, onNavigate, connection, lastUpdate, connectionError, onReconnect,
@@ -124,7 +115,7 @@ export function Shell({
           style={{
             background: "var(--warn-dim)",
             color: "var(--warn)",
-            borderBottom: "1px solid rgba(255,197,61,0.3)",
+            borderBottom: "1px solid color-mix(in srgb, var(--warn) 32%, transparent)",
           }}
         >
           MOCK MODE — every value shown is synthetic demo data, not a
@@ -132,195 +123,153 @@ export function Shell({
         </div>
       )}
 
-      <div className="flex-1 flex min-h-0">
-        <Rail page={page} onNavigate={onNavigate} />
+      {/* App bar: brand, live readouts, provenance and stream health. */}
+      <header
+        className="chrome shrink-0 flex items-center gap-4 px-4 md:px-7 h-[60px]
+                   border-b overflow-x-auto no-sb"
+      >
+        <div className="flex items-center gap-2.5 shrink-0">
+          <ReactorMark live={streaming} />
+          <div className="leading-none hidden sm:block">
+            <p className="t-h1 whitespace-nowrap" style={{ color: "var(--text-1)" }}>
+              SDN · RL Console
+            </p>
+            <p className="t-micro mt-1" style={{ color: "var(--text-4)" }}>
+              NETWORK OPS &amp; RL ANALYTICS
+            </p>
+          </div>
+        </div>
 
-        <div className="flex-1 flex flex-col min-w-0">
-          {/* Top strip: identity, live readouts, stream health. */}
-          <header
-            className="chrome beam shrink-0 flex items-center gap-3 px-3 h-[52px]
-                       border-b overflow-x-auto no-sb"
-          >
-            <div className="flex items-center gap-2 shrink-0">
-              <ReactorMark live={streaming} />
-              <div className="leading-none hidden sm:block">
-                <p
-                  className="t-h2 whitespace-nowrap"
-                  style={{ color: "var(--text-1)" }}
-                >
-                  SDN · RL Console
-                </p>
-                <p className="t-micro mt-0.5" style={{ color: "var(--text-4)" }}>
-                  NETWORK OPS &amp; RL ANALYTICS
-                </p>
-              </div>
-            </div>
+        <div
+          className="h-8 w-px shrink-0 hidden md:block"
+          style={{ background: "var(--border-1)" }}
+        />
 
-            <div
-              className="h-7 w-px shrink-0 hidden md:block"
-              style={{ background: "var(--border-1)" }}
-            />
+        <Readouts snapshot={snapshot} />
 
-            <Readouts snapshot={snapshot} />
+        <div className="flex-1 min-w-[0.5rem]" />
 
-            <div className="flex-1 min-w-[0.5rem]" />
+        <ReadOnlyBadge />
+        <div className="flex items-center gap-2 shrink-0">
+          {runBadge}
+          <StreamChip
+            state={connection} lastUpdate={lastUpdate} streaming={streaming}
+            error={connectionError} onReconnect={onReconnect}
+          />
+        </div>
+      </header>
 
-            <div className="flex items-center gap-2 shrink-0">
-              {runBadge}
-              <StreamChip
-                state={connection} lastUpdate={lastUpdate} streaming={streaming}
-                error={connectionError} onReconnect={onReconnect}
-              />
-            </div>
-          </header>
-
-          {/* Content: full bleed. The page title lives here, not in the chrome,
-              so the chrome stays a thin instrument strip. */}
-          <main className="flex-1 overflow-auto min-h-0 px-3 md:px-4 pb-4">
-            <div className="flex items-end gap-3 pt-4 pb-3">
-              <div
-                className="w-[3px] self-stretch rounded-full shrink-0"
-                style={{
-                  background: `linear-gradient(180deg, ${
-                    active?.group === "Reinforcement learning"
-                      ? "var(--rl)" : "var(--accent)"
-                  }, transparent)`,
-                  boxShadow: `0 0 14px ${
-                    active?.group === "Reinforcement learning"
-                      ? "var(--rl-glow)" : "var(--accent-glow)"
-                  }`,
-                }}
+      {/* Section nav: a conventional horizontal tab row, grouped, in place of
+          the old left-hand rail. Every page lives in exactly one group, shown
+          as a caption in front of its tabs rather than as a separate heading
+          — the groups sit close enough together that a disconnected label
+          above them would read as a fourth group. */}
+      <nav
+        className="chrome shrink-0 flex items-center gap-5 px-4 md:px-7 h-[46px]
+                   border-b overflow-x-auto no-sb"
+        aria-label="Sections"
+      >
+        {GROUPS.map((group, gi) => (
+          <div key={group} className="flex items-center gap-2 shrink-0">
+            {gi > 0 && (
+              <span
+                className="h-5 w-px shrink-0 mr-3"
+                style={{ background: "var(--border-1)" }}
                 aria-hidden="true"
               />
-              <div className="min-w-0">
-                <h1
-                  className="t-display uppercase truncate"
-                  style={{ letterSpacing: "0.01em" }}
-                >
-                  {active?.label ?? "Console"}
-                </h1>
-                <p className="t-small truncate" style={{ color: "var(--text-3)" }}>
-                  {active?.hint}
-                </p>
-              </div>
-            </div>
-            {children}
-          </main>
+            )}
+            <span
+              className="t-micro font-bold shrink-0 select-none"
+              style={{ color: "var(--text-4)", letterSpacing: "0.14em" }}
+              aria-hidden="true"
+            >
+              {group.toUpperCase()}
+            </span>
+            <ul className="flex items-center gap-1" aria-label={group}>
+              {NAV_ITEMS.filter((i) => i.group === group).map((item) => {
+                const isActive = item.id === page;
+                const tint = group === "Reinforcement learning"
+                  ? "var(--rl)" : "var(--accent)";
+                return (
+                  <li key={item.id}>
+                    <button
+                      onClick={() => onNavigate(item.id)}
+                      aria-current={isActive ? "page" : undefined}
+                      className={cx(
+                        "h-8 px-3 rounded-[7px] flex items-center gap-1.5 whitespace-nowrap",
+                        "t-small font-medium transition-colors duration-150",
+                        !isActive && "hover:bg-[var(--hover-wash)]",
+                      )}
+                      style={{
+                        background: isActive
+                          ? (group === "Reinforcement learning"
+                              ? "var(--rl-dim)" : "var(--accent-dim)")
+                          : "transparent",
+                        color: isActive ? tint : "var(--text-2)",
+                        fontWeight: isActive ? 600 : 500,
+                      }}
+                    >
+                      <span className="shrink-0">{item.icon}</span>
+                      {item.label}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </nav>
 
-          <Ticker snapshot={snapshot} />
+      {/* Content: an ordinary padded page column, capped at `--measure` so a
+          table row never puts its label and its value a hand-span apart on a
+          wide display. */}
+      <main className="flex-1 overflow-auto min-h-0 px-4 md:px-7 pb-10">
+        <div className="measure">
+          <div className="pt-7 pb-6">
+            <p
+              className="t-label mb-1.5"
+              style={{
+                color: active?.group === "Reinforcement learning"
+                  ? "var(--rl)" : "var(--accent)",
+              }}
+            >
+              {active?.group ?? "Console"}
+            </p>
+            <h1 className="t-hero truncate">
+              {active?.label ?? "Console"}
+            </h1>
+            <p className="t-body mt-2 max-w-2xl" style={{ color: "var(--text-3)" }}>
+              {active?.hint}
+            </p>
+          </div>
+          {children}
         </div>
-      </div>
+      </main>
     </div>
   );
 }
 
-/** The instrument rail. Icon-only at every width — it is a panel, not a menu
-    that expands into a column of links. */
-function Rail({
-  page, onNavigate,
-}: {
-  page: PageId;
-  onNavigate: (page: PageId) => void;
-}) {
+/** Trust signal that used to anchor the bottom of the rail. Compact chip in
+    the app bar now that there is no rail to anchor it to. */
+function ReadOnlyBadge() {
   return (
-    <aside
-      className="chrome shrink-0 w-[60px] flex flex-col items-center border-r z-30 gap-1 py-2"
-      aria-label="Sections"
+    <span
+      className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg shrink-0"
+      style={{ background: "var(--surface-2)", border: "1px solid var(--border-1)" }}
+      title="Telemetry is read from the running experiment's own files. The console issues no OpenFlow requests, so it cannot affect the controller-load measurement."
     >
-      {GROUPS.map((group, gi) => (
-        <div key={group} className="w-full flex flex-col items-center">
-          {gi > 0 && (
-            <div
-              className="w-5 h-px my-1.5"
-              style={{ background: "var(--border-1)" }}
-              aria-hidden="true"
-            />
-          )}
-          <p
-            className="t-micro font-bold mb-1 select-none"
-            style={{ color: "var(--text-4)", letterSpacing: "0.1em" }}
-            title={group}
-          >
-            {GROUP_TAG[group]}
-          </p>
-          {/* The full group name stays in the DOM for assistive tech and for
-              anyone widening the rail; the three-letter tag above is the
-              visible form. */}
-          <p className="sr-only">{group}</p>
-          <ul className="w-full space-y-1 px-1.5">
-            {NAV_ITEMS.filter((i) => i.group === group).map((item) => {
-              const isActive = item.id === page;
-              const tint = group === "Reinforcement learning"
-                ? "var(--rl)" : "var(--accent)";
-              return (
-                <li key={item.id} className="relative group">
-                  <button
-                    onClick={() => onNavigate(item.id)}
-                    aria-current={isActive ? "page" : undefined}
-                    aria-label={item.label}
-                    className={cx(
-                      "w-full h-[38px] rounded-[10px] flex items-center justify-center",
-                      "relative transition-all duration-200",
-                    )}
-                    style={{
-                      background: isActive
-                        ? (group === "Reinforcement learning"
-                            ? "var(--rl-dim)" : "var(--accent-dim)")
-                        : "transparent",
-                      color: isActive ? tint : "var(--text-3)",
-                      border: `1px solid ${isActive ? tint : "transparent"}`,
-                      boxShadow: isActive
-                        ? `0 0 20px -6px ${
-                            group === "Reinforcement learning"
-                              ? "var(--rl-glow)" : "var(--accent-glow)"
-                          }`
-                        : "none",
-                    }}
-                  >
-                    {isActive && (
-                      <span
-                        className="absolute -left-[7px] top-2 bottom-2 w-[2px] rounded-full"
-                        style={{ background: tint, boxShadow: `0 0 10px ${tint}` }}
-                        aria-hidden="true"
-                      />
-                    )}
-                    {item.icon}
-                  </button>
-
-                  {/* Hover label: a floating chip, so the rail never widens. */}
-                  <span
-                    className="pointer-events-none absolute left-[46px] top-1/2 -translate-y-1/2
-                               whitespace-nowrap rounded-lg px-2.5 py-1.5 t-small z-50
-                               opacity-0 group-hover:opacity-100 transition-opacity duration-150"
-                    style={{
-                      background: "var(--glass-strong)",
-                      border: "1px solid var(--border-2)",
-                      color: "var(--text-1)",
-                      backdropFilter: "blur(10px)",
-                      boxShadow: "var(--e3)",
-                    }}
-                    aria-hidden="true"
-                  >
-                    {item.label}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ))}
-
-      <div className="flex-1" />
-      <p
-        className="t-micro text-center px-1 pb-1 select-none"
-        style={{ color: "var(--text-4)" }}
-        title="Telemetry is read from the running experiment's own files. The console issues no OpenFlow requests, so it cannot affect the controller-load measurement."
+      <svg
+        width="13" height="13" viewBox="0 0 24 24" fill="none"
+        stroke="var(--ok)" strokeWidth="1.8" strokeLinecap="round"
+        strokeLinejoin="round" className="shrink-0" aria-hidden="true"
       >
-        READ
-        <br />
-        ONLY
-      </p>
-    </aside>
+        <path d="M12 3 4 6.2v5.1c0 4.5 3.4 8.7 8 9.7 4.6-1 8-5.2 8-9.7V6.2Z" />
+        <path d="m9 12 2 2 4-4" />
+      </svg>
+      <span className="t-micro font-bold" style={{ color: "var(--ok)" }}>
+        READ ONLY
+      </span>
+    </span>
   );
 }
 
@@ -333,7 +282,7 @@ function ReactorMark({ live }: { live: boolean }) {
         style={{
           border: "1px solid var(--border-2)",
           background:
-            "radial-gradient(circle at 50% 50%, rgba(34,228,255,0.18), transparent 70%)",
+            "radial-gradient(circle at 50% 50%, var(--accent-dim), transparent 70%)",
         }}
       />
       {live && (
@@ -351,7 +300,6 @@ function ReactorMark({ live }: { live: boolean }) {
         width="15" height="15" viewBox="0 0 24 24" fill="none"
         stroke={live ? "var(--accent)" : "var(--text-3)"} strokeWidth="2.2"
         strokeLinecap="round" strokeLinejoin="round"
-        style={{ filter: live ? "drop-shadow(0 0 6px var(--accent-glow))" : "none" }}
         aria-hidden="true"
       >
         <circle cx="5" cy="12" r="2" /><circle cx="19" cy="6" r="2" />
@@ -362,7 +310,7 @@ function ReactorMark({ live }: { live: boolean }) {
   );
 }
 
-/** Live readouts in the top strip. Every value is measured telemetry from the
+/** Live readouts in the app bar. Every value is measured telemetry from the
     running experiment; with nothing running they read as unavailable rather
     than zero, because zero is itself a measurement. */
 function Readouts({ snapshot }: { snapshot?: LiveSnapshot | null }) {
@@ -434,18 +382,18 @@ function Readout({
 
   return (
     <div
-      className="px-2 py-1 rounded-lg shrink-0 hidden md:block"
+      className="px-2.5 py-1.5 rounded-[10px] shrink-0 hidden md:block"
       style={{
-        background: "rgba(10,18,31,0.55)",
+        background: "var(--surface-2)",
         border: "1px solid var(--border-1)",
-        minWidth: 72,
+        minWidth: 78,
       }}
       title={label}
     >
       <p className="t-micro font-bold" style={{ color: "var(--text-4)" }}>
         {label}
       </p>
-      <p className="readout text-[13px] leading-tight">
+      <p className="readout text-[15px] leading-tight mt-0.5">
         <span
           key={tick}
           className={dim ? undefined : "value-flash"}
@@ -488,9 +436,11 @@ function StreamChip({
     <div
       className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg t-small shrink-0"
       style={{
-        background: streaming ? "var(--ok-dim)" : "rgba(10,18,31,0.55)",
-        border: `1px solid ${streaming ? "rgba(47,230,168,0.3)" : "var(--border-1)"}`,
-        boxShadow: streaming ? "var(--glow-ok)" : "none",
+        background: streaming ? "var(--ok-dim)" : "var(--surface-2)",
+        border: `1px solid ${
+          streaming ? "color-mix(in srgb, var(--ok) 32%, transparent)" : "var(--border-1)"
+        }`,
+        boxShadow: streaming ? "var(--ring-ok)" : "none",
       }}
       title={error ?? `Data stream: ${s.label}`}
     >
@@ -530,49 +480,6 @@ function StreamChip({
           retry
         </button>
       )}
-    </div>
-  );
-}
-
-/** Bottom strip: the run's own event log, newest first. With no events it
-    states the console's read-only guarantee instead of inventing activity. */
-function Ticker({ snapshot }: { snapshot?: LiveSnapshot | null }) {
-  const events = (snapshot?.events ?? []).slice(-14).reverse();
-
-  return (
-    <div
-      className="chrome shrink-0 h-[26px] border-t flex items-center gap-3 px-3 overflow-hidden"
-    >
-      <span
-        className="t-micro font-bold shrink-0"
-        style={{ color: "var(--accent)" }}
-      >
-        ◂ FEED
-      </span>
-      <div className="flex-1 min-w-0 overflow-hidden">
-        {events.length ? (
-          <div className="flex items-center gap-5 whitespace-nowrap overflow-x-auto no-sb">
-            {events.map((e, i) => (
-              <span key={`${e.t}-${i}`} className="t-micro flex items-center gap-1.5">
-                <span
-                  className="w-1 h-1 rounded-full shrink-0"
-                  style={{ background: "var(--accent)" }}
-                />
-                <span className="mono" style={{ color: "var(--text-4)" }}>
-                  {e.kind}
-                </span>
-                <span style={{ color: "var(--text-2)" }}>{e.detail}</span>
-              </span>
-            ))}
-          </div>
-        ) : (
-          <span className="t-micro" style={{ color: "var(--text-4)" }}>
-            No events recorded. Telemetry is read from the running
-            experiment&rsquo;s own files — the console issues no OpenFlow
-            requests, so it cannot affect the controller-load measurement.
-          </span>
-        )}
-      </div>
     </div>
   );
 }

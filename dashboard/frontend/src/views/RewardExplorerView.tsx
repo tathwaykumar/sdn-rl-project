@@ -11,15 +11,15 @@
  */
 import { useMemo, useState } from "react";
 import {
-  Area, Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, LineChart,
+  Area, Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line,
   ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { api } from "../api/client";
 import { useAsync } from "../hooks/useLive";
 import type { RewardExplain, RewardStep } from "../api/types";
 import {
-  Card, ChartLegend, Details, Empty, ErrorBox, Pill, Skeleton, SourceBadge,
-  StatusDot, tooltipStyle,
+  AboutPanel, Card, ChartLegend, Details, Empty, ErrorBox, Pill, Skeleton,
+  SourceBadge, StatusDot, tooltipStyle,
   cx, fmtNumber, fmtTime, inputClass, inputStyle,
 } from "../components/ui";
 
@@ -60,28 +60,56 @@ export function RewardExplorerView({ runId }: { runId?: string }) {
 
   const model = data?.model;
 
+  const about = (
+    <AboutPanel
+      summary={
+        <>
+          How the agent scored every decision it made, and why. The formula,
+          weights and per-term values are read from the controller's own
+          reward implementation and the run's recorded config — nothing here
+          is recomputed or estimated.
+        </>
+      }
+      terms={[
+        { term: "Term", def: "One measured quantity (e.g. throughput) × its configured weight." },
+        { term: "Reconciled", def: "Term contributions were summed and checked against the recorded score." },
+        { term: "ε (epsilon)", def: "Chance of a random action instead of the current best-known one." },
+      ]}
+    />
+  );
+
   if (!data?.available || steps.length === 0) {
+    // A line, not a plate. There is nothing to plot, so a full-height panel
+    // here would reserve the space a chart would have taken and fill it with
+    // the words "no data" — the scoring breakdown below is the useful thing
+    // on this page until a run is open.
     return (
-      <div className="space-y-4">
-        <Card title="Reward Explorer" right={<SourceBadge source="unavailable" />}>
-          <Empty
-            title="No reward data yet"
-            detail={
-              data?.reason ??
-              "The agent records a reward once per polling interval. Start an experiment, or open a completed run from History."
-            }
-          />
-        </Card>
+      <div className="space-y-6">
+        {about}
+        <div className="panel px-5 py-3.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <StatusDot tone="idle" />
+          <span className="t-body" style={{ color: "var(--text-2)" }}>
+            No reward data yet
+          </span>
+          <span className="t-small" style={{ color: "var(--text-3)" }}>
+            {data?.reason ??
+              "The agent records a reward once per polling interval. Start an experiment, or open a completed run from History."}
+          </span>
+          <span className="ml-auto shrink-0">
+            <SourceBadge source="unavailable" />
+          </span>
+        </div>
         {model && <FormulaCard model={model} />}
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {about}
       <IntroCard model={model!} source={data.source} />
 
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,420px)] gap-4">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,420px)] gap-5">
         <div className="space-y-4">
           <RewardHistory
             steps={steps}
@@ -175,9 +203,9 @@ function RewardHistory({
         </span>
       }
     >
-      <div style={{ height: 210 }}>
+      <div style={{ height: 252 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart
+          <ComposedChart
             data={chart}
             margin={{ top: 6, right: 10, bottom: 0, left: -14 }}
             onClick={(e) => {
@@ -185,6 +213,12 @@ function RewardHistory({
               if (point) onSelect(point.step);
             }}
           >
+            <defs>
+              <linearGradient id="reward-fill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--rl)" stopOpacity={0.38} />
+                <stop offset="100%" stopColor="var(--rl)" stopOpacity={0.02} />
+              </linearGradient>
+            </defs>
             <CartesianGrid stroke="var(--border-1)" strokeDasharray="2 5" vertical={false} />
             <XAxis
               dataKey="step" tick={{ fontSize: 10 }} tickLine={false}
@@ -204,14 +238,19 @@ function RewardHistory({
               labelFormatter={(v) => `Step ${v}`}
               formatter={(v: number) => [fmtNumber(v, 4), "reward"]}
             />
-            <Line
-              type="monotone" dataKey="reward" stroke="var(--rl)" strokeWidth={2}
-              dot={false} isAnimationActive={false} activeDot={{ r: 4, fill: "var(--rl)" }}
+            {/* Filled from the zero line rather than from the axis floor, so
+                the shaded area is the reward actually earned above (or lost
+                below) break-even, not an artefact of the clamp at -1. */}
+            <Area
+              type="monotone" dataKey="reward" name="reward" baseValue={0}
+              stroke="var(--rl)" strokeWidth={2} fill="url(#reward-fill)"
+              dot={false} isAnimationActive={false}
+              activeDot={{ r: 4, fill: "var(--rl)" }}
             />
             {selectedStep !== null && (
               <ReferenceLine x={selectedStep} stroke="var(--accent)" strokeDasharray="3 3" />
             )}
-          </LineChart>
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
     </Card>
@@ -319,7 +358,7 @@ function LearningDynamics({ steps }: { steps: RewardStep[] }) {
         ) : undefined
       }
     >
-      <div style={{ height: 212 }}>
+      <div style={{ height: 254 }}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={rows} margin={{ top: 6, right: 4, bottom: 0, left: -16 }}>
             <CartesianGrid stroke="var(--border-1)" strokeDasharray="2 5" vertical={false} />
@@ -549,7 +588,7 @@ function RewardWaterfall({ step }: { step: RewardStep }) {
         )
       }
     >
-      <div style={{ height: 230 }}>
+      <div style={{ height: 272 }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={rows} margin={{ top: 8, right: 8, bottom: 4, left: -12 }}>
             <CartesianGrid stroke="var(--border-1)" strokeDasharray="2 5" vertical={false} />
@@ -561,7 +600,7 @@ function RewardWaterfall({ step }: { step: RewardStep }) {
             <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
             <ReferenceLine y={0} stroke="var(--border-3)" />
             <Tooltip
-              cursor={{ fill: "rgba(34,228,255,0.04)" }}
+              cursor={{ fill: "var(--accent-wash)" }}
               contentStyle={tooltipStyle}
               formatter={(_v: number, _n, p) => {
                 const d = p.payload as {
@@ -597,7 +636,7 @@ function RewardWaterfall({ step }: { step: RewardStep }) {
         </ResponsiveContainer>
       </div>
       <p className="t-small leading-relaxed mt-1" style={{ color: "var(--text-3)" }}>
-        Green raises the score, red lowers it, violet is the result. Every bar
+        Green raises the score, red lowers it, sage is the result. Every bar
         is a recorded term value multiplied by its configured weight — nothing
         here is inferred from the total.
       </p>
@@ -645,7 +684,7 @@ function ContributionChart({ step }: { step: RewardStep }) {
         )
       }
     >
-      <div style={{ height: 190 }}>
+      <div style={{ height: 232 }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={rows} layout="vertical"
                     margin={{ top: 4, right: 40, bottom: 4, left: 8 }}>
@@ -656,7 +695,7 @@ function ContributionChart({ step }: { step: RewardStep }) {
                    tick={{ fontSize: 10.5 }} tickLine={false} axisLine={false} />
             <ReferenceLine x={0} stroke="var(--border-3)" />
             <Tooltip
-              cursor={{ fill: "rgba(255,255,255,0.03)" }}
+              cursor={{ fill: "var(--hover-wash)" }}
               contentStyle={tooltipStyle}
               formatter={(v: number, _n, p) => {
                 const d = p.payload as { term: number; weight: number };
@@ -838,24 +877,30 @@ function FormulaCard({ model }: { model: RewardExplain["model"] }) {
         ))}
       </div>
 
-      <Details summary="The formula, exactly as implemented">
+      {/* The formula itself, not behind a click: it is what this card is
+          titled for, and a formula nobody opens is not documentation. */}
+      <div className="mt-3 pt-3 border-t" style={{ borderColor: "var(--hairline)" }}>
+        <p className="t-label mb-1.5" style={{ color: "var(--text-4)" }}>
+          The formula, exactly as implemented
+        </p>
         <code className="block mono text-[11px] rounded-lg border px-3 py-2 mb-2 break-words"
               style={{ background: "var(--surface-0)", borderColor: "var(--border-1)" }}>
           reward = {model.expression}
         </code>
-        <p className="mb-2">
+        <p className="text-[11.5px] leading-relaxed" style={{ color: "var(--text-3)" }}>
           Every term is first clamped to 0–1, then weighted and summed, and the
           total is clamped to [{model.clip_range[0]}, {model.clip_range[1]}].
         </p>
+      </div>
+
+      <Details summary="Normalisation references and known limitations">
         <p className="mb-1"><strong>Normalisation references</strong></p>
-        <ul className="list-disc pl-5 space-y-0.5">
+        <ul className="list-disc pl-5 space-y-0.5 mb-3">
           {Object.entries(model.normalisers).map(([k, v]) => (
             <li key={k}><span className="mono">{k}</span> = {String(v)}</li>
           ))}
         </ul>
-      </Details>
-
-      <Details summary="Limitations you should know about">
+        <p className="mb-1"><strong>Limitations you should know about</strong></p>
         <ul className="list-disc pl-5 space-y-1">
           {model.caveats.map((c, i) => <li key={i}>{c}</li>)}
         </ul>

@@ -11,8 +11,8 @@ import type {
   FlowTablePayload, LiveSnapshot, TopologyPayload,
 } from "../api/types";
 import {
-  Card, Details, Empty, Pill, SourceBadge, StatusDot, fmtAge, fmtBits,
-  fmtPercent,
+  AboutPanel, Card, Details, Empty, Pill, SourceBadge, StatusDot, fmtAge,
+  fmtBits, fmtPercent,
 } from "../components/ui";
 import { TopologyCanvas, TopologyLegend, type Selection } from "./TopologyCanvas";
 
@@ -34,42 +34,62 @@ export function TopologyView({
   const available = live?.available ?? false;
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_356px] gap-4">
-      <Card
-        accent="net"
-        raised
-        title="Network topology"
-        subtitle={
-          available
-            ? "Link colour and animation follow measured utilisation and installed rules"
-            : (live?.reason ?? "No experiment running — showing the configured topology")
+    <div>
+      <AboutPanel
+        summary={
+          <>
+            The network's actual forwarding state, drawn from switch
+            evidence — never from what the agent intended. A link only
+            animates or colours as carrying traffic once installed flow rules
+            confirm it, and the legend beside the graph covers every symbol
+            and colour used here.
+          </>
         }
-        right={<SourceBadge source={available ? "live" : "config"}
-                            age={live?.age_s ?? null} />}
-        bodyClassName="p-0"
-        className="min-h-[600px]"
-      >
-        <div style={{ height: 580 }}>
-          <TopologyCanvas
-            snapshot={runId ? null : snapshot}
-            selection={selection}
-            onSelect={setSelection}
-            runId={runId}
-          />
-        </div>
-      </Card>
-
-      <div className="flex flex-col gap-4 min-h-0">
-        <Inspector
-          topo={topo.data}
-          selection={selection}
-          linkState={live?.link_state ?? {}}
-          flows={flows.data}
-          flowCounts={snapshot?.flow_counts ?? {}}
-        />
-        <Card title="Legend" accent="net">
-          <TopologyLegend />
+        terms={[
+          { term: "Configured", def: "The static topology definition; nothing is necessarily running." },
+          { term: "Confirmed", def: "A path with rules installed on the switches right now." },
+          { term: "Selected", def: "The node or link you clicked, shown in the inspector." },
+        ]}
+      />
+      {/* A boxed canvas card beside a fixed-width detail column — the ordinary
+          "main view + inspector sidebar" split, not a full-bleed graph with
+          panels floating on top of it. */}
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-6">
+        <Card
+          title="Network topology"
+          subtitle={available
+            ? "Colour and animation follow measured utilisation and installed rules"
+            : (live?.reason ?? "No experiment running — showing the configured topology")}
+          right={<SourceBadge source={available ? "live" : "config"} age={live?.age_s ?? null} />}
+          bodyClassName="p-0"
+        >
+          <div className="h-[calc(100vh-340px)] min-h-[420px]">
+            <TopologyCanvas
+              snapshot={runId ? null : snapshot}
+              selection={selection}
+              onSelect={setSelection}
+              runId={runId}
+            />
+          </div>
         </Card>
+
+        {/* The inspector is the reason to click a node: a sidebar column next
+            to the graph, standing in its own cards like the rest of the
+            console rather than a floating panel over the canvas. The legend
+            sits beside it, always open — a map with a hidden key is not
+            finished. */}
+        <div className="flex flex-col gap-4 min-w-0">
+          <Inspector
+            topo={topo.data}
+            selection={selection}
+            linkState={live?.link_state ?? {}}
+            flows={flows.data}
+            flowCounts={snapshot?.flow_counts ?? {}}
+          />
+          <Card title="Legend">
+            <TopologyLegend />
+          </Card>
+        </div>
       </div>
     </div>
   );
@@ -88,11 +108,11 @@ function Inspector({
 
   if (!selection) {
     return (
-      <Card title="Inspector" subtitle="Click any switch, host or link">
-        <Empty
-          title="Nothing selected"
-          detail="Select a switch to see its ports and installed flow rules, or a link for its live telemetry."
-        />
+      <Card title="Inspector">
+        <p className="t-small" style={{ color: "var(--text-3)" }}>
+          Click any switch, host or link for its ports, installed rules and
+          live telemetry.
+        </p>
       </Card>
     );
   }
@@ -284,7 +304,7 @@ function Stat({
   return (
     <div className="rounded-lg px-2.5 py-1.5" style={{ background: "var(--surface-2)" }}>
       <p className="t-micro" style={{ color: "var(--text-4)" }}>{label}</p>
-      <p className="t-h2 num" style={{ color: tone ? `var(--${tone})` : "var(--text-1)" }}>
+      <p className="readout text-[17px]" style={{ color: tone ? `var(--${tone})` : "var(--text-1)" }}>
         {value}
       </p>
     </div>

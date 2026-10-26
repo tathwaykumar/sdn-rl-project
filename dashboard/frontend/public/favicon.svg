@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- The console's reactor mark: three nodes and the links between them. -->
+  <rect width="32" height="32" rx="7" fill="#070d17"/>
+  <rect x="0.5" y="0.5" width="31" height="31" rx="6.5" fill="none"
+        stroke="#22e4ff" stroke-opacity="0.35"/>
+  <g stroke="#22e4ff" stroke-width="2" stroke-linecap="round" fill="none">
+    <path d="M10.5 15.2 21 9.6M10.5 17.4 21 23"/>
+  </g>
+  <g fill="#22e4ff">
+    <circle cx="8" cy="16" r="3"/>
+    <circle cx="23" cy="8.5" r="3"/>
+    <circle cx="23" cy="23.5" r="3"/>
+  </g>
+</svg>

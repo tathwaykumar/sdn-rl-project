@@ -22,18 +22,18 @@ type SortKey = "priority" | "n_packets" | "n_bytes" | "duration_s" | "idle_timeo
 const KIND_STYLE: Record<string, { label: string; color: string; title: string }> = {
   routed: {
     label: "routed",
-    color: "#43c98a",
+    color: "var(--ok)",
     title: "A forwarding rule the controller installed for a flow (priority ≥ 10).",
   },
   table_miss: {
     label: "table-miss",
-    color: "#e0a93a",
+    color: "var(--warn)",
     title:
       "The priority-0 catch-all that sends unmatched packets to the controller. In OpenFlow 1.3 this is a real flow entry, which is why table misses are counted from its own packet counter.",
   },
   infrastructure: {
     label: "infra",
-    color: "#8b9aab",
+    color: "var(--text-3)",
     title:
       "Controller plumbing (the IPv6 discard rule). Excluded from occupancy and hit-ratio measurements.",
   },
@@ -114,7 +114,7 @@ export function FlowTablesView({ runId }: { runId?: string }) {
               )}
               style={{
                 background: active ? "var(--surface-3)" : "var(--surface-1)",
-                borderColor: active ? "#4e9bff" : "var(--border-1)",
+                borderColor: active ? "var(--accent)" : "var(--border-1)",
               }}
             >
               <div className="flex items-center justify-between">
@@ -208,30 +208,32 @@ export function FlowTablesView({ runId }: { runId?: string }) {
           </div>
         </Card>
 
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-5">
           <Card title="Idle-timeout distribution" subtitle="Across routed rules on all switches">
             {Object.keys(timeouts).length === 0 ? (
               <Empty title="No routed rules" />
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {Object.entries(timeouts)
                   .sort((a, b) => Number(a[0]) - Number(b[0]))
                   .map(([timeout, count]) => {
                     const total = Object.values(timeouts).reduce((a, b) => a + b, 0);
                     return (
                       <div key={timeout}>
-                        <div className="flex justify-between text-[11px] mb-0.5">
-                          <span>{timeout}s</span>
+                        <div className="flex justify-between t-small mb-1">
+                          <span className="readout">{timeout}s</span>
                           <span className="num" style={{ color: "var(--text-2)" }}>
                             {count} ({fmtNumber((count / total) * 100, 0)}%)
                           </span>
                         </div>
-                        <div className="h-1.5 rounded-full" style={{ background: "var(--surface-3)" }}>
+                        <div className="h-2 rounded-full overflow-hidden"
+                             style={{ background: "var(--surface-3)" }}>
                           <div
                             className="h-full rounded-full"
                             style={{
                               width: `${(count / total) * 100}%`,
-                              background: "var(--variant-c)",
+                              background: "var(--accent)",
+                              boxShadow: "0 0 10px color-mix(in srgb, var(--accent) 55%, transparent)",
                             }}
                           />
                         </div>
@@ -291,7 +293,7 @@ function RuleRow({ rule }: { rule: FlowRule }) {
           : "—";
   return (
     <tr
-      className="border-t hover:bg-white/[0.02]"
+      className="border-t hover:bg-[var(--hover-wash-soft)]"
       style={{ borderColor: "var(--border-1)" }}
     >
       <td className="px-3 py-1.5">
@@ -333,7 +335,7 @@ function OccupancySpark({
         <polyline
           points={points}
           fill="none"
-          stroke="var(--variant-a)"
+          stroke="var(--accent)"
           strokeWidth={2}
           vectorEffect="non-scaling-stroke"
         />

@@ -10,9 +10,24 @@ import { api, downloadUrls } from "../api/client";
 import { useAsync } from "../hooks/useLive";
 import type { RunSummary } from "../api/types";
 import {
-  Button, Card, Details, Empty, ErrorBox, Pill, SectionTitle, Skeleton,
-  StatusDot, VARIANT_COLOR, cx, fmtBytes, fmtDuration, inputClass, inputStyle,
+  AboutPanel, Button, Card, Details, Empty, ErrorBox, Pill, SectionTitle,
+  Skeleton, StatusDot, VARIANT_COLOR, cx, fmtBytes, fmtDuration, inputClass,
+  inputStyle,
 } from "../components/ui";
+
+/** One aligned figure in a run row: the value over the unit it is counted in.
+    Stacking the unit under the number keeps the columns narrow enough to line
+    up across every row. */
+function RunStat({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="hidden md:block min-w-0">
+      <div className="readout text-[13px] truncate" style={{ color: "var(--text-2)" }}>
+        {value}
+      </div>
+      <div className="t-micro" style={{ color: "var(--text-4)" }}>{label}</div>
+    </div>
+  );
+}
 
 const STATUS_TONE: Record<string, "ok" | "warn" | "bad" | "idle"> = {
   running: "ok", complete: "ok", incomplete: "warn", interrupted: "bad",
@@ -64,7 +79,23 @@ export function HistoryView({
   if (error) return <Card title="Experiments"><ErrorBox message={error} onRetry={refresh} /></Card>;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-8">
+      <AboutPanel
+        summary={
+          <>
+            Every run recorded on disk, searchable and traceable back to its
+            exact configuration, reward weights and software versions.{" "}
+            <strong>Primary matrix</strong> runs are the project's controlled
+            sweep; everything else is tagged <strong>ad-hoc</strong> and is
+            excluded from A/B/C Comparison's statistics.
+          </>
+        }
+        terms={[
+          { term: "ad-hoc", def: "Outside the controlled matrix — a one-off or diagnostic run." },
+          { term: "Interrupted", def: "Stopped before completing; usually unusable for analysis." },
+          { term: "Provenance", def: "The exact git commit and software versions a run used." },
+        ]}
+      />
       {selectedRunId && (
         <div
           className="panel px-4 py-3 flex flex-wrap items-center justify-between gap-3"
@@ -83,18 +114,25 @@ export function HistoryView({
         </div>
       )}
 
+      {/* One ruled strip, not five plates. These five numbers are a single
+          sentence about what is on disk — the page's subject is the list
+          below, and five full-height cards gave the preamble more weight than
+          the thing it introduces. */}
       <section>
-        <SectionTitle hint="Every run directory on disk, including interrupted ones">
-          Summary
-        </SectionTitle>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-          <SummaryTile label="Total runs" value={stats.total} />
+        <div className="panel grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5
+                        divide-x divide-y sm:divide-y-0"
+             style={{ borderColor: "var(--border-1)" }}>
+          <SummaryTile label="Total runs" value={stats.total}
+                       hint="on disk" />
           <SummaryTile label="Primary matrix" value={stats.matrix}
-                       hint="untagged controlled sweep" tone="ok" />
-          <SummaryTile label="Complete" value={stats.byStatus.complete ?? 0} tone="ok" />
+                       hint="controlled sweep" tone="ok" />
+          <SummaryTile label="Complete" value={stats.byStatus.complete ?? 0}
+                       hint="usable" tone="ok" />
           <SummaryTile label="Interrupted" value={stats.byStatus.interrupted ?? 0}
+                       hint="stopped early"
                        tone={(stats.byStatus.interrupted ?? 0) > 0 ? "bad" : undefined} />
           <SummaryTile label="Incomplete" value={stats.byStatus.incomplete ?? 0}
+                       hint="missing output"
                        tone={(stats.byStatus.incomplete ?? 0) > 0 ? "warn" : undefined} />
         </div>
       </section>
@@ -104,7 +142,7 @@ export function HistoryView({
           Explore
         </SectionTitle>
 
-        <div className="panel px-3 py-2.5 mb-3 flex flex-wrap items-center gap-2">
+        <div className="panel px-4 py-3 mb-4 flex flex-wrap items-center gap-2">
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -210,16 +248,22 @@ function SummaryTile({
   hint?: string;
   tone?: "ok" | "warn" | "bad";
 }) {
+  // A cell in the summary strip, so it carries no border or background of its
+  // own; the strip rules them apart.
   return (
-    <div className="panel px-3.5 py-3">
-      <p className="t-small" style={{ color: "var(--text-3)" }}>{label}</p>
-      <p className="num" style={{
-        fontSize: 24, fontWeight: 640, letterSpacing: "-0.02em",
+    <div className="px-5 py-4" style={{ borderColor: "var(--border-1)" }}>
+      <p className="t-label truncate" style={{ color: "var(--text-3)" }}>{label}</p>
+      <p className="readout mt-2" style={{
+        fontSize: 32, lineHeight: 1, fontWeight: 500,
         color: tone ? `var(--${tone})` : "var(--text-1)",
       }}>
         {value}
       </p>
-      {hint && <p className="t-micro" style={{ color: "var(--text-4)" }}>{hint}</p>}
+      {hint && (
+        <p className="t-micro mt-1.5 truncate" style={{ color: "var(--text-4)" }}>
+          {hint}
+        </p>
+      )}
     </div>
   );
 }
@@ -245,15 +289,26 @@ function RunCard({
       className={cx("panel panel-hover overflow-hidden")}
       style={isSelected ? { borderColor: "var(--accent-ring)" } : undefined}
     >
-      <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+      {/* Fixed columns rather than a flex row: with one flexible identity cell
+          the remaining values landed wherever the row happened to end, so no
+          two rows lined up and a wide display put the label and its numbers a
+          hand-span apart. */}
+      <div
+        className="grid items-center gap-x-5 gap-y-2 px-4 py-3.5
+                   grid-cols-[3px_minmax(0,1fr)_auto]
+                   md:grid-cols-[3px_minmax(0,1fr)_repeat(3,86px)_112px_auto]"
+      >
         <span
-          className="w-1 h-9 rounded-full shrink-0"
-          style={{ background: VARIANT_COLOR[run.variant] }}
+          className="w-[3px] h-10 rounded-full shrink-0"
+          style={{
+            background: VARIANT_COLOR[run.variant],
+            boxShadow: `0 0 10px ${VARIANT_COLOR[run.variant]}`,
+          }}
           aria-hidden="true"
         />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="t-h2">Variant {run.variant}</span>
+            <span className="text-[13px] font-semibold">Variant {run.variant}</span>
             <Pill>{run.workload}</Pill>
             <span className="t-small num" style={{ color: "var(--text-3)" }}>
               seed {run.seed}
@@ -264,30 +319,30 @@ function RunCard({
               </Pill>
             )}
           </div>
-          <p className="t-micro mono truncate mt-0.5" style={{ color: "var(--text-4)" }}>
+          <p className="t-micro mono truncate mt-1" style={{ color: "var(--text-4)" }}>
             {run.run_id}
           </p>
         </div>
 
-        <div className="hidden md:flex items-center gap-5 t-small shrink-0"
-             style={{ color: "var(--text-3)" }}>
-          <span className="num">{fmtDuration(run.duration_s)}</span>
-          <span className="num">{run.flow_dump_samples ?? 0} dumps</span>
-          <span className="num">{run.iperf_files} iperf</span>
-        </div>
+        <RunStat value={fmtDuration(run.duration_s)} label="duration" />
+        <RunStat value={String(run.flow_dump_samples ?? 0)} label="dumps" />
+        <RunStat value={String(run.iperf_files)} label="iperf" />
 
-        <span className="flex items-center gap-1.5 shrink-0">
+        <span className="hidden md:flex items-center gap-2">
           <StatusDot tone={tone} pulse={run.status === "running"} />
-          <span className="t-small" style={{ color: "var(--text-2)" }}>{run.status}</span>
+          <span className="t-small truncate" style={{ color: "var(--text-2)" }}>
+            {run.status}
+          </span>
         </span>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 col-start-3 md:col-start-auto
+                        justify-self-end">
           <Button variant="ghost" onClick={onOpen}>Open</Button>
           <button
             onClick={onToggle}
             aria-expanded={expanded}
             aria-label={expanded ? "Hide details" : "Show details"}
-            className="px-2 py-1.5 rounded-lg border t-small"
+            className="px-2.5 py-2 rounded-[10px] border t-small"
             style={{ borderColor: "var(--border-2)", color: "var(--text-3)" }}
           >
             {expanded ? "▴" : "▾"}

@@ -132,9 +132,13 @@ describe("App", () => {
 
   it("groups navigation so RL pages are findable", () => {
     render(<App />);
-    expect(screen.getByText("Operations")).toBeInTheDocument();
-    expect(screen.getByText("Reinforcement learning")).toBeInTheDocument();
-    expect(screen.getByText("Experiments", { selector: "p" })).toBeInTheDocument();
+    // Asserted through each group's accessible name (the <ul aria-label>)
+    // rather than its visible caption text, which is a plain style choice.
+    for (const group of [
+      "Operations", "Reinforcement learning", "Runs",
+    ]) {
+      expect(screen.getByRole("list", { name: group })).toBeInTheDocument();
+    }
   });
 
   it("marks the current page for assistive technology", async () => {

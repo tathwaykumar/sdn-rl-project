@@ -119,7 +119,10 @@ function RunBadge({
   return (
     <div
       className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border t-small"
-      style={{ background: "var(--ok-dim)", borderColor: "rgba(52,211,153,0.32)" }}
+      style={{
+        background: "var(--ok-dim)",
+        borderColor: "color-mix(in srgb, var(--ok) 32%, transparent)",
+      }}
     >
       <StatusDot tone="ok" pulse />
       <span className="font-semibold"

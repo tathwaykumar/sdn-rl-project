@@ -19,6 +19,16 @@ export const VARIANT_LABEL: Record<string, string> = {
   C: "Joint RL routing + RL timeouts",
 };
 
+/** Colour for the network's two link-disjoint forwarding paths. Deliberately
+    not the variant colours: "Path A/B" and "Variant A/B/C" are two unrelated
+    axes, and sharing a palette between them read as a connection that is not
+    there. Kept within the accent's own family (a brighter and a muted shade)
+    rather than a third, unrelated hue. */
+export const PATH_COLOR: Record<string, string> = {
+  A: "var(--accent-2)",
+  B: "var(--rl)",
+};
+
 export function cx(...parts: (string | false | null | undefined)[]): string {
   return parts.filter(Boolean).join(" ");
 }
@@ -126,50 +136,42 @@ export function Card({
         className,
       )}
     >
-      {live && <span className="sheen" aria-hidden="true" />}
       {(title || right) && (
+        // flex-wrap, not a fixed row: a long subtitle sharing a row with a
+        // wide `right` control (a metric picker, a toolbar) had nowhere to
+        // go but a column one word wide on a phone. Wrapped, `right` drops
+        // to its own line and the subtitle gets the full row back.
         <header
-          className="flex items-start justify-between gap-3 px-4 py-2.5 border-b relative"
-          style={{
-            borderColor: "var(--hairline)",
-            background: "linear-gradient(180deg, rgba(120,190,240,0.04), transparent)",
-          }}
+          className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 px-5 pt-4 pb-3 border-b relative"
+          style={{ borderColor: "var(--hairline)" }}
         >
-          <div className="min-w-0 flex items-start gap-2.5">
-            {icon ? (
+          <div className="min-w-0 flex items-baseline gap-2.5">
+            {icon && (
               <span
-                className="shrink-0 mt-0.5"
-                style={{ color: tint, filter: `drop-shadow(0 0 6px ${tint})` }}
+                className="shrink-0 self-center"
+                style={{ color: tint }}
                 aria-hidden="true"
               >
                 {icon}
               </span>
-            ) : (
-              title && (
-                <span
-                  className="shrink-0 mt-[7px] w-[6px] h-[6px] rotate-45"
-                  style={{ background: tint, boxShadow: `0 0 8px ${tint}` }}
-                  aria-hidden="true"
-                />
-              )
             )}
             <div className="min-w-0">
               {title && (
-                <h2 className="t-h2 uppercase" style={{ letterSpacing: "0.045em" }}>
+                <h2 className="t-h2" style={{ color: "var(--text-2)" }}>
                   {title}
                 </h2>
               )}
               {subtitle && (
-                <p className="t-small mt-0.5" style={{ color: "var(--text-3)" }}>
+                <p className="t-small mt-1.5" style={{ color: "var(--text-3)" }}>
                   {subtitle}
                 </p>
               )}
             </div>
           </div>
-          {right && <div className="shrink-0">{right}</div>}
+          {right && <div className="shrink-0 self-start">{right}</div>}
         </header>
       )}
-      <div className={cx("p-4 flex-1 min-h-0 relative", bodyClassName)}>{children}</div>
+      <div className={cx("p-5 flex-1 min-h-0 relative", bodyClassName)}>{children}</div>
     </section>
   );
 }
@@ -185,36 +187,83 @@ export function SectionTitle({
   hint?: string;
 }) {
   return (
-    <div className="flex items-end justify-between gap-3 mb-2.5 mt-1">
-      <div className="min-w-0">
+    <div className="flex items-end justify-between gap-4 mb-4 mt-2">
+      <div className="min-w-0 flex-1">
         <h2
-          className="t-label flex items-center gap-2"
-          style={{ color: "var(--accent)" }}
+          className="t-label flex items-center gap-3"
+          style={{ color: "var(--text-2)" }}
         >
-          <span
-            className="w-1 h-1 rounded-full shrink-0"
-            style={{ background: "var(--accent)", boxShadow: "0 0 7px var(--accent)" }}
-            aria-hidden="true"
-          />
           {children}
-          {/* A rule that runs out to the edge: reads as an instrument label
-              rather than a document heading. */}
+          {/* A rule that runs out to the edge: reads as a ledger heading rather
+              than a document heading. */}
           <span
             className="flex-1 h-px min-w-[1.5rem]"
-            style={{
-              background:
-                "linear-gradient(90deg, var(--border-2), transparent)",
-            }}
+            style={{ background: "var(--border-1)" }}
             aria-hidden="true"
           />
         </h2>
         {hint && (
-          <p className="t-small mt-0.5" style={{ color: "var(--text-4)" }}>
+          <p className="t-small mt-1" style={{ color: "var(--text-4)" }}>
             {hint}
           </p>
         )}
       </div>
       {right}
+    </div>
+  );
+}
+
+/** A page's own explanation of itself: what it is for, and the handful of
+ * terms a first-time reader needs to make sense of what follows. Always
+ * visible — no accordion, no click to reveal — because the console is a
+ * research instrument people outside the project will open cold, and an
+ * explanation nobody opens is not an explanation.
+ *
+ * Kept to one short paragraph plus a compact term strip on purpose: this is
+ * orientation, not documentation. Anything longer belongs in a `Details`
+ * block further down the page, where it can be as technical as the subject
+ * needs without competing with the page for the reader's first glance. */
+export function AboutPanel({
+  summary,
+  terms,
+}: {
+  summary: ReactNode;
+  /** Short glossary, shown inline: a term and a one-line gloss. */
+  terms?: { term: string; def: string }[];
+}) {
+  return (
+    <div
+      className="rounded-[10px] border px-4 py-3 mb-5"
+      style={{ borderColor: "var(--border-1)", background: "var(--surface-1)" }}
+    >
+      <div className="flex items-start gap-3">
+        <span
+          className="t-micro font-bold shrink-0 mt-[1px]"
+          style={{ color: "var(--accent)", letterSpacing: "0.12em" }}
+        >
+          ABOUT THIS PAGE
+        </span>
+        <p className="t-small leading-relaxed min-w-0" style={{ color: "var(--text-2)" }}>
+          {summary}
+        </p>
+      </div>
+      {terms && terms.length > 0 && (
+        <dl
+          className="flex flex-wrap gap-x-5 gap-y-1 mt-2.5 pt-2.5 border-t"
+          style={{ borderColor: "var(--hairline)" }}
+        >
+          {terms.map((t) => (
+            <div key={t.term} className="flex items-baseline gap-1.5 max-w-full">
+              <dt className="t-micro font-bold shrink-0" style={{ color: "var(--text-3)" }}>
+                {t.term}
+              </dt>
+              <dd className="t-micro" style={{ color: "var(--text-4)" }}>
+                {t.def}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
     </div>
   );
 }
@@ -251,65 +300,48 @@ export function HeroMetric({
         ? "var(--warn)"
         : "var(--text-1)";
 
-  const glow = unavailable
-    ? "transparent"
-    : tone === "bad"
-      ? "var(--bad-glow)"
-      : tone === "warn"
-        ? "var(--warn-glow)"
-        : "var(--accent-glow)";
-
   return (
     <div
-      className="panel panel-hover relative overflow-hidden px-4 pt-3 pb-2.5 flex flex-col gap-0.5"
+      className="panel panel-hover relative overflow-hidden flex flex-col"
       title={explain}
     >
-      {/* A pool of light behind the number: the readout is the focal point. */}
-      {!unavailable && (
-        <span
-          className="absolute pointer-events-none"
-          style={{
-            left: -20, top: 2, width: 190, height: 110,
-            background: `radial-gradient(circle at 30% 50%, ${glow}, transparent 68%)`,
-            opacity: 0.5,
-          }}
-          aria-hidden="true"
-        />
-      )}
-      {spark && spark.length > 1 && (
-        <Sparkline values={spark} tone={tone} />
-      )}
-      <div className="flex items-start justify-between gap-2 relative">
-        <span
-          className="t-label truncate"
-          style={{ color: "var(--text-3)" }}
-        >
+      {/* Header, figure and footnote are separated by rules rather than by a
+          pool of light. The number is the largest thing on the plate, which is
+          what makes it the focal point — it does not need to glow. */}
+      <div
+        className="flex items-center justify-between gap-2 px-5 pt-3.5 pb-3"
+      >
+        <span className="t-label truncate" style={{ color: "var(--text-3)" }}>
           {label}
         </span>
         {source && <SourceBadge source={source} />}
       </div>
-      <div className="flex items-baseline gap-1.5 relative">
-        <span
-          className={cx("readout leading-none", !unavailable && "glow-text")}
-          style={{ color, fontSize: 38, fontWeight: 650 }}
-        >
-          {value}
-        </span>
-        {unit && !unavailable && (
+
+      <div className="px-5 pb-1">
+        <div className="flex items-baseline gap-2">
           <span
-            className="t-small font-semibold"
-            style={{ color: "var(--text-3)" }}
+            className="readout leading-none"
+            style={{ color, fontSize: 44, fontWeight: 500 }}
           >
-            {unit}
+            {value}
           </span>
+          {unit && !unavailable && (
+            <span className="t-small" style={{ color: "var(--text-3)" }}>
+              {unit}
+            </span>
+          )}
+        </div>
+        {/* Segmented meter: the last N samples, drawn only from the same
+            telemetry the number came from. */}
+        {spark && spark.length > 1 && !unavailable && (
+          <LedMeter values={spark} tone={tone} />
         )}
       </div>
-      {/* Segmented meter: the last N samples as LED bars, drawn only from the
-          same telemetry the number came from. */}
-      {spark && spark.length > 1 && !unavailable && (
-        <LedMeter values={spark} tone={tone} />
-      )}
-      <div className="flex items-center justify-between gap-2 relative mt-auto pt-1">
+
+      <div
+        className="flex items-center justify-between gap-2 mt-auto px-5 py-2.5 border-t"
+        style={{ borderColor: "var(--hairline)" }}
+      >
         <span className="t-small truncate" style={{ color: "var(--text-3)" }}>
           {sub}
         </span>
@@ -323,27 +355,28 @@ export function HeroMetric({
     own maximum, so it shows shape, not an absolute scale — the number above
     carries the magnitude. */
 function LedMeter({ values, tone }: { values: number[]; tone?: string }) {
-  const window = values.slice(-28);
+  const window = values.slice(-30);
   const max = Math.max(...window, 0.0001);
   const color =
     tone === "bad" ? "var(--bad)" : tone === "warn" ? "var(--warn)" : "var(--accent)";
   return (
     <div
-      className="flex items-end gap-[2px] h-5 relative mt-1"
+      className="flex items-end gap-[2px] h-7 relative mt-1.5"
       aria-hidden="true"
     >
       {window.map((v, i) => {
-        const h = Math.max(8, (v / max) * 100);
+        const h = Math.max(6, (v / max) * 100);
         const recent = i >= window.length - 3;
         return (
           <span
             key={i}
-            className="flex-1 rounded-sm"
+            className="flex-1 rounded-t-[2px]"
             style={{
               height: `${h}%`,
               background: color,
-              opacity: recent ? 0.95 : 0.3 + (i / window.length) * 0.35,
-              boxShadow: recent ? `0 0 8px ${color}` : "none",
+              /* Older samples fade back so the newest reading reads first.
+                 Opacity, not a glow: the bar is a mark, not a lamp. */
+              opacity: recent ? 0.95 : 0.2 + (i / window.length) * 0.35,
             }}
           />
         );
@@ -352,61 +385,42 @@ function LedMeter({ values, tone }: { values: number[]; tone?: string }) {
   );
 }
 
-/** Background sparkline. Purely supportive: the number carries the meaning. */
-function Sparkline({ values, tone }: { values: number[]; tone?: string }) {
-  const max = Math.max(...values, 0.0001);
-  const pts = values
-    .map((v, i) => `${(i / (values.length - 1)) * 100},${34 - (v / max) * 30}`)
-    .join(" ");
-  const stroke =
-    tone === "bad" ? "var(--bad)" : tone === "warn" ? "var(--warn)" : "var(--accent)";
-  return (
-    <svg
-      className="absolute inset-x-0 bottom-0 w-full pointer-events-none"
-      height="38" viewBox="0 0 100 38" preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      <polyline points={pts} fill="none" stroke={stroke} strokeWidth="1.2"
-                opacity="0.32" vectorEffect="non-scaling-stroke" />
-      <polyline points={`0,38 ${pts} 100,38`} fill={stroke} opacity="0.06"
-                stroke="none" />
-    </svg>
-  );
-}
-
 // -------------------------------------------------------------- source badge
 const SOURCE_STYLE: Record<
   DataSource,
   { label: string; bg: string; fg: string; title: string }
 > = {
+  // Deliberately not the variant hues: a RECORDED badge in variant A's blue
+  // read as a claim about variant A. These are chrome, so they come from the
+  // theme's own ramp instead.
   live: {
     label: "LIVE",
-    bg: "rgba(46,163,107,0.15)",
-    fg: "#43c98a",
+    bg: "var(--ok-dim)",
+    fg: "var(--ok)",
     title: "Measured from the experiment running right now.",
   },
   historical: {
     label: "RECORDED",
-    bg: "rgba(57,135,229,0.15)",
-    fg: "#5f9fe8",
+    bg: "var(--rl-dim)",
+    fg: "var(--rl)",
     title: "Read from a completed run's stored measurements.",
   },
   config: {
     label: "CONFIG",
-    bg: "rgba(163,176,191,0.15)",
-    fg: "#a3b0bf",
+    bg: "var(--config-dim)",
+    fg: "var(--text-2)",
     title: "Static project configuration, not a measurement.",
   },
   mock: {
     label: "MOCK DATA",
-    bg: "rgba(201,133,0,0.2)",
-    fg: "#e0a93a",
+    bg: "var(--warn-dim)",
+    fg: "var(--warn)",
     title: "Synthetic demo data. NOT a measurement of any network.",
   },
   unavailable: {
     label: "UNAVAILABLE",
-    bg: "rgba(111,127,144,0.15)",
-    fg: "#8b9aab",
+    bg: "var(--unavailable-dim)",
+    fg: "var(--text-3)",
     title: "Not measurable right now.",
   },
 };
@@ -491,24 +505,28 @@ export function Empty({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center text-center py-10 px-6 gap-2 relative overflow-hidden">
+    <div className="flex flex-col items-center justify-center text-center py-12 px-6 gap-3 relative overflow-hidden">
       {/* A waiting instrument sweeps; it is not reporting a measurement. */}
       <span className="scanline" aria-hidden="true" />
       <div
-        className="w-10 h-10 rounded-lg border flex items-center justify-center text-base relative"
+        className="w-12 h-12 rounded-xl border flex items-center justify-center text-lg relative"
         style={{
           borderColor: "var(--border-2)",
           color: "var(--text-3)",
-          background: "rgba(10,18,31,0.6)",
-          boxShadow: "inset 0 0 18px rgba(34,228,255,0.07)",
+          background: "var(--panel-sunken)",
+          boxShadow: "inset 0 0 22px var(--accent-wash)",
         }}
       >
         ∅
       </div>
-      <p className="text-[13px] font-medium">{title}</p>
+      {/* Not `t-h2`: that is the small-caps label used for panel furniture, and
+          an empty state is a sentence to read, not a heading to scan past. */}
+      <p className="t-body font-medium" style={{ color: "var(--text-2)" }}>
+        {title}
+      </p>
       {detail && (
         <p
-          className="text-[12px] max-w-md leading-relaxed"
+          className="t-small max-w-md leading-relaxed"
           style={{ color: "var(--text-3)" }}
         >
           {detail}
@@ -524,9 +542,9 @@ export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () =
     <div
       className="rounded-lg border px-4 py-3 text-[12px] flex items-start gap-3"
       style={{
-        borderColor: "rgba(224,82,82,0.35)",
-        background: "rgba(224,82,82,0.08)",
-        color: "#f0a3a3",
+        borderColor: "color-mix(in srgb, var(--bad) 42%, transparent)",
+        background: "var(--bad-dim)",
+        color: "var(--bad)",
       }}
     >
       <span className="mt-0.5">⚠</span>
@@ -538,7 +556,10 @@ export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () =
         <button
           onClick={onRetry}
           className="shrink-0 px-2 py-1 rounded border text-[11px]"
-          style={{ borderColor: "rgba(224,82,82,0.4)", color: "#f0a3a3" }}
+          style={{
+            borderColor: "color-mix(in srgb, var(--bad) 45%, transparent)",
+            color: "var(--bad)",
+          }}
         >
           Retry
         </button>
@@ -595,39 +616,42 @@ export function MetricCard({
         ? "var(--warn)"
         : "var(--text-1)";
   return (
-    <div className="panel panel-hover px-4 py-3 flex flex-col gap-1">
-      <div className="flex items-center justify-between gap-2">
+    <div className="panel panel-hover flex flex-col relative overflow-hidden">
+      <div className="flex items-center justify-between gap-2 px-5 pt-3.5 pb-3">
         <span
-          className="text-[11px] font-medium truncate"
-          style={{ color: "var(--text-2)" }}
+          className="t-label truncate"
+          style={{ color: "var(--text-3)" }}
           title={explain ?? label}
         >
           {label}
         </span>
         {source && <SourceBadge source={source} />}
       </div>
-      <div className="flex items-baseline gap-1.5">
+      <div className="flex items-baseline gap-2 px-5 pb-3.5">
         <span
-          className={cx("readout text-[26px] leading-tight", !unavailable && "glow-text")}
-          style={{ color }}
+          className="readout text-[32px] leading-none"
+          style={{ color, fontWeight: 500 }}
         >
           {value}
         </span>
         {unit && !unavailable && (
-          <span className="text-[11px] font-semibold" style={{ color: "var(--text-3)" }}>
+          <span className="text-[11px]" style={{ color: "var(--text-3)" }}>
             {unit}
           </span>
         )}
       </div>
-      <div className="flex items-center justify-between gap-2 mt-auto pt-0.5">
-        <span className="text-[11px] truncate" style={{ color: "var(--text-3)" }}>
+      <div
+        className="flex items-center justify-between gap-2 mt-auto px-5 py-2.5 border-t"
+        style={{ borderColor: "var(--hairline)" }}
+      >
+        <span className="t-small truncate" style={{ color: "var(--text-3)" }}>
           {sub}
         </span>
         <span className="flex items-center gap-1.5 shrink-0">
           <DirectionHint direction={direction} />
           {kind && (
             <span
-              className="text-[9.5px] px-1 py-0.5 rounded"
+              className="text-[9.5px] px-1.5 py-0.5 rounded"
               style={{ background: "var(--surface-3)", color: "var(--text-4)" }}
               title={
                 kind === "instantaneous"
@@ -669,17 +693,17 @@ export function Button({
     string,
     { bg: string; fg: string; border: string; glow?: string }
   > = {
+    // Flat fills. The primary action is the only solid one on a page, which is
+    // what makes it read as primary — it does not need a gradient or a halo.
     default: {
-      bg: "rgba(17,28,45,0.8)", fg: "var(--text-1)", border: "var(--border-2)",
+      bg: "var(--surface-3)", fg: "var(--text-1)", border: "var(--border-2)",
     },
     primary: {
-      bg: "linear-gradient(135deg, rgba(34,228,255,0.22), rgba(139,92,246,0.22))",
-      fg: "var(--accent-strong)", border: "var(--accent-ring)",
-      glow: "0 0 22px -6px var(--accent-glow)",
+      bg: "var(--accent)", fg: "var(--on-accent)", border: "var(--accent)",
     },
     danger: {
-      bg: "var(--bad-dim)", fg: "var(--bad)", border: "rgba(255,107,107,0.42)",
-      glow: "0 0 20px -8px var(--bad-glow)",
+      bg: "var(--bad-dim)", fg: "var(--bad)",
+      border: "color-mix(in srgb, var(--bad) 50%, transparent)",
     },
     ghost: { bg: "transparent", fg: "var(--text-2)", border: "var(--border-1)" },
   };
@@ -691,17 +715,18 @@ export function Button({
       disabled={disabled}
       title={title}
       className={cx(
-        "px-3 py-1.5 rounded-lg border text-[12px] font-semibold tracking-wide",
+        "px-3.5 py-2 rounded-[8px] border text-[12px] font-semibold",
         "transition-all duration-150",
         disabled
           ? "opacity-40 cursor-not-allowed"
-          : "hover:brightness-125 active:scale-[0.98]",
+          : "hover:brightness-110 active:scale-[0.98]",
       )}
       style={{
         background: s.bg,
         color: s.fg,
         borderColor: s.border,
         boxShadow: disabled ? "none" : s.glow,
+        letterSpacing: "0.03em",
       }}
     >
       {children}
@@ -761,7 +786,7 @@ export const tooltipLabelStyle = {
   marginBottom: 2,
 } as const;
 
-export const tooltipCursor = { fill: "rgba(34,228,255,0.05)" } as const;
+export const tooltipCursor = { fill: "var(--accent-wash)" } as const;
 
 /** Chart legend.
  *
@@ -871,7 +896,7 @@ function Swatch({
 }
 
 export const inputClass =
-  "px-2.5 py-1.5 rounded-lg border text-[12px] outline-none focus:ring-1 focus:ring-sky-600";
+  "px-3 py-2 rounded-[10px] border text-[12px] outline-none focus:ring-1 focus:ring-sky-600";
 
 /** Collapsible technical detail.
  *
@@ -956,7 +981,7 @@ export function Pill({
       className="px-1.5 py-[1px] rounded text-[10px] font-semibold tracking-wide"
       title={title}
       style={{
-        background: color ? `${color}1f` : "rgba(17,28,45,0.8)",
+        background: color ? `${color}1f` : "var(--surface-3)",
         color: color ?? "var(--text-2)",
         border: `1px solid ${color ? `${color}3d` : "var(--border-1)"}`,
       }}

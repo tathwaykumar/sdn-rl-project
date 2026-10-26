@@ -15,8 +15,8 @@ import { api } from "../api/client";
 import { useAsync } from "../hooks/useLive";
 import type { ExperimentOptions, ExperimentStatus } from "../api/types";
 import {
-  Button, Card, Empty, ErrorBox, Field, Pill, Skeleton, SourceBadge, StatusDot,
-  VARIANT_COLOR, cx, fmtDuration, inputClass, inputStyle,
+  AboutPanel, Button, Card, Empty, ErrorBox, Field, Pill, Skeleton, SourceBadge,
+  StatusDot, VARIANT_COLOR, cx, fmtDuration, inputClass, inputStyle,
 } from "../components/ui";
 
 export function ExperimentsView() {
@@ -93,7 +93,24 @@ export function ExperimentsView() {
   };
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-[400px_1fr] gap-4">
+    <div>
+      <AboutPanel
+        summary={
+          <>
+            Start, stop and monitor a single run. A, B and C are the three
+            fixed routing strategies the project compares — this page launches
+            one of them; <strong>A/B/C Comparison</strong> is where results
+            from many runs are aggregated into a verdict.
+          </>
+        }
+        terms={[
+          { term: "Variant A", def: "Conventional routing, fixed timeouts — the baseline." },
+          { term: "Variant B", def: "RL chooses the path; timeouts stay fixed." },
+          { term: "Variant C", def: "RL chooses the path and the flow-rule timeout." },
+          { term: "Seed", def: "Fixes randomness so a run can be reproduced exactly." },
+        ]}
+      />
+      <div className="grid grid-cols-1 xl:grid-cols-[400px_1fr] gap-4">
       <div className="flex flex-col gap-4">
         <Card title="Start a run" subtitle="Invokes experiments/run_experiment.py directly">
           <div className="space-y-3">
@@ -195,9 +212,9 @@ export function ExperimentsView() {
               <div
                 className="rounded-lg border px-3 py-2 text-[11px] leading-relaxed"
                 style={{
-                  borderColor: "rgba(201,133,0,0.35)",
-                  background: "rgba(201,133,0,0.08)",
-                  color: "#e0b45a",
+                  borderColor: "color-mix(in srgb, var(--warn) 35%, transparent)",
+                  background: "var(--warn-dim)",
+                  color: "var(--warn)",
                 }}
               >
                 {st.blocked_reason}
@@ -208,11 +225,11 @@ export function ExperimentsView() {
               <div
                 className="rounded-lg border px-3 py-2 text-[11px] leading-relaxed"
                 style={{
-                  borderColor: message.kind === "ok"
-                    ? "rgba(46,163,107,0.35)" : "rgba(224,82,82,0.35)",
-                  background: message.kind === "ok"
-                    ? "rgba(46,163,107,0.08)" : "rgba(224,82,82,0.08)",
-                  color: message.kind === "ok" ? "#6fd3a3" : "#f0a3a3",
+                  borderColor: `color-mix(in srgb, var(${
+                    message.kind === "ok" ? "--ok" : "--bad"
+                  }) 35%, transparent)`,
+                  background: message.kind === "ok" ? "var(--ok-dim)" : "var(--bad-dim)",
+                  color: message.kind === "ok" ? "var(--ok)" : "var(--bad)",
                 }}
               >
                 {message.text}
@@ -329,6 +346,7 @@ export function ExperimentsView() {
             </div>
           </Card>
         )}
+      </div>
       </div>
     </div>
   );

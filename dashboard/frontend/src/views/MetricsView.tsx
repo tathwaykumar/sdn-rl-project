@@ -11,14 +11,15 @@
  * being presented as live.
  */
 import {
-  CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip,
+  XAxis, YAxis,
 } from "recharts";
 import { api } from "../api/client";
 import { useAsync } from "../hooks/useLive";
 import type { LatencyPayload, LiveMetrics, LiveSnapshot, MetricSeries } from "../api/types";
 import {
-  Card, ChartLegend, Empty, ErrorBox, MetricCard, Skeleton, SourceBadge,
-  tooltipLabelStyle, tooltipStyle,
+  AboutPanel, Card, ChartLegend, Empty, ErrorBox, MetricCard, PATH_COLOR,
+  Skeleton, SourceBadge, tooltipLabelStyle, tooltipStyle,
   fmtNumber, fmtPercent,
 } from "../components/ui";
 
@@ -100,7 +101,24 @@ export function MetricsView({
   const src = live?.source ?? series.data?.source ?? "unavailable";
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-7">
+      <AboutPanel
+        summary={
+          <>
+            Every measured figure for the current or selected run: switch
+            egress counters for throughput and rules, the controller's own
+            message rates, and the host's independent ping stream for latency
+            and loss. Each card states its unit and whether higher or lower is
+            desirable; nothing here is recomputed from the project's own
+            analysis — it reads the same counters.
+          </>
+        }
+        terms={[
+          { term: "Interval", def: "Averaged over one polling window, shown above the charts." },
+          { term: "Instant", def: "A single reading at one moment, not averaged." },
+          { term: "↑ / ↓ better", def: "Which direction is desirable; ‘context’ means neither." },
+        ]}
+      />
       <div className="flex items-center justify-between">
         <p className="text-[11px]" style={{ color: "var(--text-3)" }}>
           {interval
@@ -110,142 +128,145 @@ export function MetricsView({
         <SourceBadge source={src} age={live?.age_s ?? null} />
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <MetricCard
-          label="Throughput (delivered)"
-          value={fmtNumber(((values.delivered_bps as number) ?? 0) / 1e6, 2)}
-          unit="Mbit/s"
-          sub="host-facing egress counters"
-          kind={meta.delivered_bps?.kind}
-          source={src}
-        />
-        <MetricCard
-          label="Latency (median RTT)"
-          value={latency?.available ? fmtNumber(latency.median_ms, 1) : "—"}
-          unit="ms"
-          sub={
-            latency?.available
-              ? `p95 ${fmtNumber(latency.p95_ms, 1)} ms · ${latency.samples} probes / ${fmtNumber(latency.window_s, 0)}s`
-              : (latency?.reason ?? "not measured")
-          }
-          kind="interval_rate"
-          source={latency?.available ? (latency.source ?? src) : "unavailable"}
-        />
-        <MetricCard
-          label="Packet loss (end-to-end)"
-          value={
-            latency?.available && latency.loss_fraction !== null &&
-            latency.loss_fraction !== undefined
-              ? fmtNumber(latency.loss_fraction * 100, 2)
-              : "N/A"
-          }
-          unit="%"
-          sub={
-            latency?.available
-              ? `${latency.lost ?? 0} lost of ${latency.probes_sent ?? 0} probes`
-              : "no probe data"
-          }
-          tone={(latency?.loss_fraction ?? 0) > 0.05 ? "bad"
-            : (latency?.loss_fraction ?? 0) > 0.01 ? "warn" : undefined}
-          source={latency?.available ? (latency.source ?? src) : "unavailable"}
-          direction="lower_is_better"
-          explain="Probes that never received a reply. Probes answered late count as delayed, not lost."
-        />
-        <MetricCard
-          label="Probes delayed"
-          value={
-            latency?.available && latency.delayed_fraction !== null &&
-            latency.delayed_fraction !== undefined
-              ? fmtNumber(latency.delayed_fraction * 100, 1)
-              : "N/A"
-          }
-          unit="%"
-          sub={
-            latency?.available
-              ? `${latency.delayed ?? 0} answered late (>200 ms)`
-              : "no probe data"
-          }
-          tone={(latency?.delayed_fraction ?? 0) > 0.5 ? "warn" : undefined}
-          source={latency?.available ? (latency.source ?? src) : "unavailable"}
-          direction="lower_is_better"
-          explain="Delivered, but only after the next probe was due. A symptom of queueing, not loss."
-        />
-        <MetricCard
-          label="Max link utilisation"
-          value={fmtNumber(((values.max_link_util as number) ?? 0) * 100, 1)}
-          unit="%"
-          sub={`A ${fmtPercent(values.util_A as number, 0)} · B ${fmtPercent(values.util_B as number, 0)}`}
-          tone={((values.max_link_util as number) ?? 0) > 0.9 ? "warn" : undefined}
-          kind={meta.max_link_util?.kind}
-          source={src}
-        />
-        <MetricCard
-          label="Flow-table occupancy"
-          value={fmtNumber(values.total_rules as number, 0)}
-          unit="rules"
-          sub="routed rules across all switches"
-          kind={meta.total_rules?.kind}
-          source={src}
-        />
-        <MetricCard
-          label="Table misses"
-          value={fmtNumber(values.table_misses as number, 0)}
-          unit="packets"
-          sub={`${fmtNumber(values.miss_rate_per_s as number, 1)} /s`}
-          kind={meta.table_misses?.kind}
-          source={src}
-        />
-        <MetricCard
-          label="Controller PacketIn"
-          value={fmtNumber(values.packet_in_rate as number, 1)}
-          unit="msg/s"
-          sub="reactive load"
-          kind={meta.packet_in_rate?.kind}
-          source={src}
-        />
-        <MetricCard
-          label="Controller FlowMod"
-          value={fmtNumber(values.flow_mod_rate as number, 1)}
-          unit="msg/s"
-          sub="rule installations"
-          kind={meta.flow_mod_rate?.kind}
-          source={src}
-        />
+      {/* Two headline figures and a spec sheet, not nine identical cards.
+          A 3x3 grid of same-sized plates gives every reading the same weight,
+          so nothing is findable: delivered throughput and end-to-end latency
+          are what the project is judged on, and the other seven are the
+          supporting readings you scan as a column. */}
+      {/* The two headline figures sit directly above the trace they summarise,
+          with the spec sheet running down the side. Both halves are then about
+          the same height, so neither column ends in dead space. */}
+      <div className="grid grid-cols-1 items-start
+                      xl:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)] gap-5">
+        <div className="space-y-5 min-w-0">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <MetricCard
+              label="Throughput (delivered)"
+              value={fmtNumber(((values.delivered_bps as number) ?? 0) / 1e6, 2)}
+              unit="Mbit/s"
+              sub="host-facing egress counters"
+              kind={meta.delivered_bps?.kind}
+              source={src}
+            />
+            <MetricCard
+              label="Latency (median RTT)"
+              value={latency?.available ? fmtNumber(latency.median_ms, 1) : "—"}
+              unit="ms"
+              sub={
+                latency?.available
+                  ? `p95 ${fmtNumber(latency.p95_ms, 1)} ms · ${latency.samples} probes / ${fmtNumber(latency.window_s, 0)}s`
+                  : (latency?.reason ?? "not measured")
+              }
+              kind="interval_rate"
+              source={latency?.available ? (latency.source ?? src) : "unavailable"}
+            />
+          </div>
+
+          <Chart
+            title="Throughput"
+            subtitle="Delivered to hosts, from switch egress counters"
+            data={chartData}
+            tall
+            lines={[{ key: "throughput", label: "Mbit/s", color: "var(--accent)" }]}
+          />
+        </div>
+
+        <Card title="Supporting readings" className="xl:row-span-1">
+          <div>
+            <SpecRow
+              label="Packet loss"
+              value={
+                latency?.available && latency.loss_fraction != null
+                  ? fmtNumber(latency.loss_fraction * 100, 2) : "N/A"
+              }
+              unit="%"
+              note={latency?.available
+                ? `${latency.lost ?? 0} of ${latency.probes_sent ?? 0} probes`
+                : "no probe data"}
+              tone={(latency?.loss_fraction ?? 0) > 0.05 ? "bad"
+                : (latency?.loss_fraction ?? 0) > 0.01 ? "warn" : undefined}
+              explain="Probes that never received a reply. Probes answered late count as delayed, not lost."
+            />
+            <SpecRow
+              label="Probes delayed"
+              value={
+                latency?.available && latency.delayed_fraction != null
+                  ? fmtNumber(latency.delayed_fraction * 100, 1) : "N/A"
+              }
+              unit="%"
+              note={latency?.available
+                ? `${latency.delayed ?? 0} answered late (>200 ms)`
+                : "no probe data"}
+              tone={(latency?.delayed_fraction ?? 0) > 0.5 ? "warn" : undefined}
+              explain="Delivered, but only after the next probe was due. A symptom of queueing, not loss."
+            />
+            <SpecRow
+              label="Max link utilisation"
+              value={fmtNumber(((values.max_link_util as number) ?? 0) * 100, 1)}
+              unit="%"
+              note={`A ${fmtPercent(values.util_A as number, 0)} · B ${fmtPercent(values.util_B as number, 0)}`}
+              tone={((values.max_link_util as number) ?? 0) > 0.9 ? "warn" : undefined}
+            />
+            <SpecRow
+              label="Flow-table occupancy"
+              value={fmtNumber(values.total_rules as number, 0)}
+              unit="rules"
+              note="routed rules across all switches"
+            />
+            <SpecRow
+              label="Table misses"
+              value={fmtNumber(values.table_misses as number, 0)}
+              unit="packets"
+              note={`${fmtNumber(values.miss_rate_per_s as number, 1)} /s`}
+            />
+            <SpecRow
+              label="Controller PacketIn"
+              value={fmtNumber(values.packet_in_rate as number, 1)}
+              unit="msg/s"
+              note="reactive load"
+            />
+            <SpecRow
+              label="Controller FlowMod"
+              value={fmtNumber(values.flow_mod_rate as number, 1)}
+              unit="msg/s"
+              note="rule installations"
+            />
+          </div>
+        </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Chart
-          title="Throughput"
-          subtitle="Delivered to hosts, from switch egress counters"
-          data={chartData}
-          lines={[{ key: "throughput", label: "Mbit/s", color: "var(--variant-a)" }]}
-        />
-        <Chart
-          title="Path utilisation"
-          subtitle="Per-path bottleneck utilisation"
-          data={chartData}
-          unit="%"
-          lines={[
-            { key: "utilA", label: "Path A", color: "var(--variant-a)" },
-            { key: "utilB", label: "Path B", color: "var(--variant-c)" },
-          ]}
-        />
-        <Chart
-          title="Flow-table occupancy"
-          subtitle="Routed rules installed across all switches"
-          data={chartData}
-          lines={[{ key: "rules", label: "rules", color: "var(--variant-b)" }]}
-        />
-        <Chart
-          title="Controller load"
-          subtitle="Reactive messages only; stats polling is excluded"
-          data={chartData}
-          unit="msg/s"
-          lines={[
-            { key: "packetIn", label: "PacketIn", color: "var(--variant-b)" },
-            { key: "flowMod", label: "FlowMod", color: "var(--variant-c)" },
-          ]}
-        />
+      {/* The three supporting traces share a row. In an even 2x2 the delivered
+          -throughput trace — the result the project reports — had exactly the
+          same prominence as the controller's message rate. */}
+      <div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <Chart
+            title="Path utilisation"
+            subtitle="Per-path bottleneck utilisation"
+            data={chartData}
+            unit="%"
+            lines={[
+              { key: "utilA", label: "Path A", color: PATH_COLOR.A },
+              { key: "utilB", label: "Path B", color: PATH_COLOR.B },
+            ]}
+          />
+          <Chart
+            title="Flow-table occupancy"
+            subtitle="Routed rules across all switches"
+            data={chartData}
+            lines={[{ key: "rules", label: "rules", color: "var(--rl)" }]}
+          />
+          <Chart
+            title="Controller load"
+            subtitle="Reactive messages only; polling excluded"
+            data={chartData}
+            unit="msg/s"
+            lines={[
+              { key: "packetIn", label: "PacketIn", color: "var(--warn)" },
+              { key: "flowMod", label: "FlowMod", color: "var(--accent)" },
+            ]}
+          />
+        </div>
       </div>
 
       <LossPanel latency={latency} runId={runId} snapshot={snapshot} />
@@ -276,14 +297,57 @@ export function MetricsView({
   );
 }
 
+/** One supporting reading: name, figure, and how it was measured.
+ *
+ * These were nine equal cards; as rows they are scanned as a column and take a
+ * third of the height, which is what leaves room for the charts to be the
+ * thing you see first. */
+function SpecRow({
+  label, value, unit, note, tone, explain,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+  note: string;
+  tone?: "warn" | "bad";
+  explain?: string;
+}) {
+  const unavailable = value === "N/A" || value === "—";
+  const color = unavailable
+    ? "var(--text-4)"
+    : tone === "bad"
+      ? "var(--bad)"
+      : tone === "warn" ? "var(--warn)" : "var(--text-1)";
+  return (
+    <div className="spec" title={explain ?? label}>
+      <div className="min-w-0">
+        <p className="t-small truncate" style={{ color: "var(--text-2)" }}>
+          {label}
+        </p>
+        <p className="t-micro truncate" style={{ color: "var(--text-4)" }}>
+          {note}
+        </p>
+      </div>
+      <p className="readout text-[17px] whitespace-nowrap" style={{ color }}>
+        {value}
+        <span className="t-micro ml-1.5" style={{ color: "var(--text-4)" }}>
+          {unavailable ? "" : unit}
+        </span>
+      </p>
+    </div>
+  );
+}
+
 function Chart({
-  title, subtitle, data, lines, unit,
+  title, subtitle, data, lines, unit, tall,
 }: {
   title: string;
   subtitle?: string;
   data: Record<string, string | number>[];
   lines: { key: string; label: string; color: string }[];
   unit?: string;
+  /** The page's primary trace, given roughly twice the plot height. */
+  tall?: boolean;
 }) {
   if (data.length < 2) {
     return (
@@ -292,43 +356,72 @@ function Chart({
       </Card>
     );
   }
+  // A single series is drawn as a filled area: the fill gives the plot weight
+  // and costs nothing, because there is no other series for it to hide. Two or
+  // more stay as lines, where overlapping fills would occlude each other.
+  const single = lines.length === 1;
+  const axes = (
+    <>
+      <CartesianGrid stroke="var(--border-1)" strokeDasharray="2 5" vertical={false} />
+      <XAxis
+        dataKey="t" tick={{ fontSize: 10, fill: "var(--text-3)" }}
+        axisLine={{ stroke: "var(--border-1)" }} tickLine={false} minTickGap={48}
+        dy={4}
+      />
+      <YAxis
+        tick={{ fontSize: 10, fill: "var(--text-3)" }}
+        axisLine={false} tickLine={false} width={52}
+        label={
+          unit
+            ? {
+                value: unit, angle: -90, position: "insideLeft",
+                offset: 24, fontSize: 9, fill: "var(--text-4)",
+              }
+            : undefined
+        }
+      />
+      <Tooltip
+        contentStyle={tooltipStyle}
+        labelStyle={tooltipLabelStyle}
+        cursor={{ stroke: "var(--accent-ring)", strokeDasharray: "3 4" }}
+        formatter={(value: number, name: string) => [
+          `${fmtNumber(value, 2)}${unit ? ` ${unit}` : ""}`, name,
+        ]}
+      />
+    </>
+  );
+
   return (
     <Card title={title} subtitle={subtitle}>
-      <div style={{ height: 190 }}>
+      <div style={{ height: tall ? 300 : 204 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: -18 }}>
-            <CartesianGrid stroke="var(--border-1)" strokeDasharray="2 4" vertical={false} />
-            <XAxis
-              dataKey="t" tick={{ fontSize: 9, fill: "var(--text-3)" }}
-              axisLine={{ stroke: "var(--border-1)" }} tickLine={false} minTickGap={40}
-            />
-            <YAxis
-              tick={{ fontSize: 9, fill: "var(--text-3)" }}
-              axisLine={false} tickLine={false} width={48}
-              label={
-                unit
-                  ? {
-                      value: unit, angle: -90, position: "insideLeft",
-                      offset: 22, fontSize: 9, fill: "var(--text-4)",
-                    }
-                  : undefined
-              }
-            />
-            <Tooltip
-              contentStyle={tooltipStyle}
-              labelStyle={tooltipLabelStyle}
-              cursor={{ stroke: "var(--border-3)", strokeDasharray: "3 3" }}
-              formatter={(value: number, name: string) => [
-                `${fmtNumber(value, 2)}${unit ? ` ${unit}` : ""}`, name,
-              ]}
-            />
-            {lines.map((l) => (
-              <Line
-                key={l.key} type="monotone" dataKey={l.key} name={l.label}
-                stroke={l.color} strokeWidth={2} dot={false} isAnimationActive={false}
+          {single ? (
+            <AreaChart data={data} margin={{ top: 8, right: 10, bottom: 0, left: -14 }}>
+              <defs>
+                <linearGradient id={`fill-${lines[0].key}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={lines[0].color} stopOpacity={0.4} />
+                  <stop offset="100%" stopColor={lines[0].color} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              {axes}
+              <Area
+                type="monotone" dataKey={lines[0].key} name={lines[0].label}
+                stroke={lines[0].color} strokeWidth={2}
+                fill={`url(#fill-${lines[0].key})`}
+                dot={false} isAnimationActive={false}
               />
-            ))}
-          </LineChart>
+            </AreaChart>
+          ) : (
+            <LineChart data={data} margin={{ top: 8, right: 10, bottom: 0, left: -14 }}>
+              {axes}
+              {lines.map((l) => (
+                <Line
+                  key={l.key} type="monotone" dataKey={l.key} name={l.label}
+                  stroke={l.color} strokeWidth={2} dot={false} isAnimationActive={false}
+                />
+              ))}
+            </LineChart>
+          )}
         </ResponsiveContainer>
       </div>
       {/* Two or more series always get a key; one series is named by the
@@ -415,9 +508,9 @@ function LossPanel({
         <div
           className="mt-3 rounded-lg border px-3 py-2 text-[11.5px] leading-relaxed"
           style={{
-            borderColor: "rgba(248,113,113,0.35)",
+            borderColor: "color-mix(in srgb, var(--bad) 35%, transparent)",
             background: "var(--bad-dim)",
-            color: "#fca5a5",
+            color: "var(--bad)",
           }}
         >
           <strong>Loss is high for this workload.</strong>{" "}

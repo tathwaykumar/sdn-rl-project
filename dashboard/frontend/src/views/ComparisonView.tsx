@@ -10,7 +10,7 @@
  */
 import { useMemo, useState } from "react";
 import {
-  Bar, BarChart, CartesianGrid, Cell as RCell, ErrorBar, LabelList,
+  Bar, BarChart, CartesianGrid, Cell as RCell, ErrorBar,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { api, downloadUrls } from "../api/client";
@@ -19,8 +19,8 @@ import type {
   ComparisonPayload, DeltaInfo, MetricInfo, StatSummary,
 } from "../api/types";
 import {
-  Card, ChartLegend, Details, Empty, ErrorBox, Pill, Skeleton, SourceBadge,
-  VARIANT_COLOR, VARIANT_LABEL, fmtNumber, inputClass, inputStyle,
+  AboutPanel, Card, ChartLegend, Details, Empty, ErrorBox, Pill, Skeleton,
+  SourceBadge, VARIANT_COLOR, VARIANT_LABEL, fmtNumber, inputClass, inputStyle,
   tooltipCursor, tooltipStyle,
 } from "../components/ui";
 
@@ -81,6 +81,23 @@ export function ComparisonView() {
 
   return (
     <div className="flex flex-col gap-4">
+      <AboutPanel
+        summary={
+          <>
+            Aggregates completed runs by variant and workload to ask whether B
+            or C measurably beat A. A difference is only called real when the
+            95% confidence intervals across seeds do not overlap — otherwise
+            it is reported as <em>not distinguishable</em>, never as &ldquo;no
+            difference&rdquo;.
+          </>
+        }
+        terms={[
+          { term: "Workload", def: "Traffic pattern a run was driven with — light, heavy, churn or failure." },
+          { term: "n", def: "Number of seeds (independent runs) behind a figure." },
+          { term: "Baseline", def: "The variant every other variant is compared against." },
+          { term: "CI 95%", def: "Confidence interval across seeds, drawn as whiskers on the chart." },
+        ]}
+      />
       <HeadlineChart data={data} metrics={metrics} baseline={baseline} />
       <Card
         title="Comparison settings"
@@ -342,7 +359,7 @@ function HeadlineChart({
         />
       ) : (
         <>
-          <div style={{ height: 268 }}>
+          <div style={{ height: 320 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={rows} margin={{ top: 10, right: 8, bottom: 4, left: -10 }}
                         barGap={2} barCategoryGap="22%">
@@ -379,16 +396,16 @@ function HeadlineChart({
                       <RCell key={i} stroke="var(--surface-0)" strokeWidth={2} />
                     ))}
                     <ErrorBar
-                      dataKey={`${v}_err`} width={5} strokeWidth={1.4}
+                      dataKey={`${v}_err`} width={6} strokeWidth={1.5}
                       stroke="var(--text-2)"
                     />
-                    {data.workloads.length <= 4 && (
-                      <LabelList
-                        dataKey={v} position="top" offset={8}
-                        formatter={(x: number) => fmtNumber(x, metric.digits)}
-                        style={{ fontSize: 9, fill: "var(--text-3)" }}
-                      />
-                    )}
+                    {/* No value label on the bar. It is positioned from the
+                        bar's top, while the confidence whisker extends above
+                        it by an amount that varies per cell, so the two
+                        collided on exactly the cells with the widest
+                        intervals. The mean, median, IQR and n are all in the
+                        hover tooltip, and the table below gives each
+                        comparison against A. */}
                   </Bar>
                 ))}
               </BarChart>
@@ -507,7 +524,7 @@ function Takeaway({
     <div
       className="rounded-lg px-3 py-2.5 mb-3"
       style={{
-        background: "rgba(10,18,31,0.5)",
+        background: "var(--surface-2)",
         border: "1px solid var(--border-1)",
       }}
     >

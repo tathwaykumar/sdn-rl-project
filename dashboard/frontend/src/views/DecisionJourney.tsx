@@ -298,7 +298,7 @@ function StageAction({
 }
 
 /** Minimal h1→s1→(s2→s4 | s3→s5→s4)→h3 sketch. The agent's chosen path is an
- * intention (dashed violet); confirmed is a fact (solid cyan), drawn only
+ * intention (dashed sage); confirmed is a fact (solid emerald), drawn only
  * when switch evidence actually says so. Never the same stroke style. */
 function MiniPathDiagram({ chosenPath, confirmedPath }: { chosenPath: string; confirmedPath?: string | null }) {
   const isA = (p: string) => p === "A";
@@ -431,7 +431,7 @@ function StageReward({ rewardStep, className }: { rewardStep?: RewardStep; class
         and controller load subtract from it. Each bar below is one term's
         weighted contribution.
       </p>
-      <div style={{ height: 160 }}>
+      <div style={{ height: 196 }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={[...bars, finalRow]} margin={{ left: -10, right: 8, top: 4, bottom: 4 }}>
             <XAxis dataKey="label" tick={{ fontSize: 9 }} tickLine={false}
@@ -508,12 +508,12 @@ function StageLearn({
       <div className="flex items-center gap-4 mb-2">
         <div>
           <p className="t-micro" style={{ color: "var(--text-4)" }}>Q-value before</p>
-          <p className="t-h2 num">{fmtNumber(before, 4)}</p>
+          <p className="readout text-[17px]">{fmtNumber(before, 4)}</p>
         </div>
         <span style={{ color: "var(--text-4)" }} aria-hidden="true">→</span>
         <div>
           <p className="t-micro" style={{ color: "var(--text-4)" }}>Q-value after</p>
-          <p className="t-h2 num" style={{ color: delta !== null && delta >= 0 ? "var(--ok)" : "var(--bad)" }}>
+          <p className="readout text-[17px]" style={{ color: delta !== null && delta >= 0 ? "var(--ok)" : "var(--bad)" }}>
             {fmtNumber(after, 4)}
           </p>
         </div>
