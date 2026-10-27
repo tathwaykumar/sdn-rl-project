@@ -369,26 +369,37 @@ def test_q_values_reconcile_with_greedy_action_on_a_real_instrumented_run():
         pytest.skip("no instrumented run in this checkout yet")
 
     # Run directories are named "<UTC timestamp>-...", so the lexicographic
-    # max is also the most recently recorded run.
-    newest_path = max(instrumented, key=lambda p: os.path.basename(os.path.dirname(os.path.dirname(p))))
-    raw_dir = os.path.dirname(newest_path)
-    decisions = T.read_decisions(raw_dir, limit=500)
+    # max is also the most recently recorded run. Variant A has no agent, so
+    # its instrumented CSVs carry the q_values_json column with every row
+    # empty -- newest-first, skip those and use the newest run that actually
+    # has a decision to check (B or C), rather than failing on an A run that
+    # happens to be the most recent one recorded.
+    for newest_path in sorted(
+        instrumented,
+        key=lambda p: os.path.basename(os.path.dirname(os.path.dirname(p))),
+        reverse=True,
+    ):
+        raw_dir = os.path.dirname(newest_path)
+        decisions = T.read_decisions(raw_dir, limit=500)
 
-    checked = 0
-    for d in decisions:
-        q = d.get("q_values")
-        if not q or not q.get("allowed"):
-            continue
-        allowed = q["allowed"]
-        values = q["values"]
-        argmax = max(allowed, key=lambda k: values[k])
-        if d.get("greedy_action"):
-            checked += 1
-            assert argmax == d["greedy_action"], (
-                f"{raw_dir} step {d['step']}: logged greedy_action "
-                f"{d['greedy_action']!r} != argmax {argmax!r} of logged Q-values"
-            )
-    assert checked > 0, f"{raw_dir} had q_values_json but no decision to check"
+        checked = 0
+        for d in decisions:
+            q = d.get("q_values")
+            if not q or not q.get("allowed"):
+                continue
+            allowed = q["allowed"]
+            values = q["values"]
+            argmax = max(allowed, key=lambda k: values[k])
+            if d.get("greedy_action"):
+                checked += 1
+                assert argmax == d["greedy_action"], (
+                    f"{raw_dir} step {d['step']}: logged greedy_action "
+                    f"{d['greedy_action']!r} != argmax {argmax!r} of logged Q-values"
+                )
+        if checked > 0:
+            break
+    else:
+        pytest.skip("no instrumented run with a checkable (agent-driven) decision yet")
 
 
 # ------------------------------------------------------------- HTTP endpoints

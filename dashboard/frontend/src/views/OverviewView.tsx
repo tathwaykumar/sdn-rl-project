@@ -37,8 +37,15 @@ export function OverviewView({
 }) {
   const live = snapshot?.live;
   const active = Boolean(live?.active) && !runId;
-  const metrics = snapshot?.metrics;
-  const latency = snapshot?.latency;
+
+  // The live websocket feed only ever carries the network's current state,
+  // so it is forced to null for a selected run (see App.tsx) -- a recorded
+  // run's vitals come from the same per-run endpoints every other page uses
+  // instead, not from the live feed.
+  const historicalMetrics = useAsync(() => api.metricsLive(runId), [runId]);
+  const historicalLatency = useAsync(() => api.latency(runId), [runId]);
+  const metrics = runId ? historicalMetrics.data : snapshot?.metrics;
+  const latency = runId ? historicalLatency.data : snapshot?.latency;
   const values = metrics?.values ?? {};
 
   const runs = useAsync(() => api.runs(), [], 30000);
@@ -66,7 +73,8 @@ export function OverviewView({
   const vitals = [
     {
       label: "Throughput",
-      value: active ? fmtNumber(((values.delivered_bps as number) ?? 0) / 1e6, 2) : "N/A",
+      value: metrics?.available
+        ? fmtNumber(((values.delivered_bps as number) ?? 0) / 1e6, 2) : "N/A",
       unit: "Mbit/s",
       spark: active ? sparks.throughput : undefined,
       direction: "higher_is_better",
@@ -92,7 +100,7 @@ export function OverviewView({
     },
     {
       label: "Flow rules",
-      value: active ? fmtNumber(values.total_rules as number, 0) : "N/A",
+      value: metrics?.available ? fmtNumber(values.total_rules as number, 0) : "N/A",
       unit: "installed",
       spark: active ? sparks.rules : undefined,
       direction: "context",
