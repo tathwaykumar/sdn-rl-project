@@ -18,7 +18,7 @@ import { api } from "../api/client";
 import { useAsync } from "../hooks/useLive";
 import type { RewardExplain, RewardStep } from "../api/types";
 import {
-  AboutPanel, Card, ChartLegend, Details, Empty, ErrorBox, Pill, Skeleton,
+  AboutPanel, Card, ChartLegend, Empty, ErrorBox, Pill, Skeleton,
   SourceBadge, StatusDot, tooltipStyle,
   cx, fmtNumber, fmtTime, inputClass, inputStyle,
 } from "../components/ui";
@@ -71,8 +71,9 @@ export function RewardExplorerView({ runId }: { runId?: string }) {
         </>
       }
       terms={[
-        { term: "Term", def: "One measured quantity (e.g. throughput) × its configured weight." },
-        { term: "Reconciled", def: "Term contributions were summed and checked against the recorded score." },
+        { term: "Term value", def: "One measured quantity (e.g. throughput), scaled to 0–1. Not yet weighted." },
+        { term: "Contribution", def: "Term value × its weight × sign — what that term actually adds or subtracts." },
+        { term: "Reconciled", def: "The contributions were summed and checked against the recorded score." },
         { term: "ε (epsilon)", def: "Chance of a random action instead of the current best-known one." },
       ]}
     />
@@ -133,7 +134,7 @@ export function RewardExplorerView({ runId }: { runId?: string }) {
         </div>
       </div>
 
-      <FormulaCard model={model!} />
+      <FormulaCard model={model!} step={current} />
     </div>
   );
 }
@@ -253,6 +254,15 @@ function RewardHistory({
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+      <p className="t-small leading-relaxed mt-2" style={{ color: "var(--text-3)" }}>
+        <strong>Horizontal axis:</strong> decision step — one per polling
+        interval, in order. <strong>Vertical axis:</strong> the recorded
+        reward for that interval, from -1 (worst) to +1 (best); the dotted
+        line at 0 is break-even. The filled area is shaded from 0, so it
+        shows reward actually earned above break-even or lost below it, not
+        the distance down to -1. The dashed green line marks whichever step
+        is selected below.
+      </p>
     </Card>
   );
 }
@@ -477,40 +487,57 @@ function LearningDynamics({ steps }: { steps: RewardStep[] }) {
         </div>
       )}
 
-      <Details summary="How to read this, and what it does not show">
-        <ul className="space-y-1.5 leading-relaxed">
+      <div className="mt-3 pt-3 border-t" style={{ borderColor: "var(--hairline)" }}>
+        <p className="t-label mb-1.5" style={{ color: "var(--text-4)" }}>
+          How to read this, and what it does not show
+        </p>
+        <ul className="space-y-1.5 leading-relaxed t-small" style={{ color: "var(--text-2)" }}>
           <li>
-            <strong>Reward trend.</strong> The solid band is a {WINDOW}-step
-            rolling mean of the rewards actually recorded; the faint line is the
-            raw per-step value. The mean is a smoothing of recorded numbers,
-            nothing more.
+            <strong>Reward trend</strong> (solid filled line, left axis): a{" "}
+            {WINDOW}-step rolling mean of the rewards actually recorded — the
+            average of this step and the {WINDOW - 1} before it. The faint
+            thin line underneath is the raw, un-averaged per-step value; it is
+            noisy on its own, which is why the mean is the one to read.
           </li>
           {hasEpsilon && (
             <li>
-              <strong>ε is a schedule, not a result.</strong> It falls from{" "}
-              {fmtNumber(stats.epsFirst, 3)} to {fmtNumber(stats.epsLast, 3)}{" "}
-              across this run because the configuration decays it on a fixed
-              timetable. It is drawn here because exploration depresses reward
-              early on, so the reward trend has to be read against it.
+              <strong>ε, exploration rate</strong> (dashed line, right axis):
+              falls from {fmtNumber(stats.epsFirst, 3)} to{" "}
+              {fmtNumber(stats.epsLast, 3)} across this run because the
+              configuration decays it on a fixed timetable — it is a
+              schedule, not a result. It is drawn here because exploration
+              depresses reward early on, so the reward trend has to be read
+              against it: a dip while ε is still high may just be the agent
+              trying things, not the policy getting worse.
             </li>
           )}
+          <li>
+            <strong>Dots</strong> mark exploratory steps: the agent picked a
+            random action instead of its current best, specifically to keep
+            learning about options it might otherwise never revisit.
+          </li>
           {hasTd && (
             <li>
-              <strong>|TD error| is how far each update moved an estimate.</strong>{" "}
-              If it shrinks, the Q-table is settling. That means the value
-              estimates are converging — it is not by itself evidence that the
+              <strong>Value-estimate movement</strong> (the small chart below):
+              |TD error| is how far each Q-learning update moved an action's
+              value estimate — see the Decision Inspector for exactly how that
+              update is computed. If it shrinks over the run, the Q-table is
+              settling toward stable values. That is evidence the estimates
+              are converging; it is not, by itself, evidence that the
               resulting policy routes traffic better.
             </li>
           )}
           <li>
-            <strong>This chart cannot show causation.</strong> Reward depends on
-            the live network as well as the agent, so a rising trend is not
-            proof that the agent learned a better policy. The A/B/C Comparison
-            page is where variants are tested against a baseline with
-            confidence intervals.
+            <strong>What this chart cannot show.</strong> Reward depends on
+            the live network as well as the agent's choices, so a rising
+            trend is not proof the agent learned a better policy — and this
+            page has only one run to look at, so it cannot say whether this
+            run beat another variant. The A/B/C Comparison page is where
+            variants are tested against a baseline with confidence intervals
+            across multiple seeds.
           </li>
         </ul>
-      </Details>
+      </div>
     </Card>
   );
 }
@@ -636,9 +663,13 @@ function RewardWaterfall({ step }: { step: RewardStep }) {
         </ResponsiveContainer>
       </div>
       <p className="t-small leading-relaxed mt-1" style={{ color: "var(--text-3)" }}>
-        Green raises the score, red lowers it, sage is the result. Every bar
-        is a recorded term value multiplied by its configured weight — nothing
-        here is inferred from the total.
+        <strong>Horizontal axis:</strong> each term in the formula, applied in
+        order, ending in the final reward. <strong>Vertical axis:</strong> the
+        running total as each term is added. Each bar's height is that term's
+        contribution; green bars raise the score, red bars lower it, and the
+        final sage bar is the result after every term has been applied —
+        nothing here is inferred from the total backward, every bar is a
+        recorded value.
       </p>
       {step.clipped && (
         <p className="t-small mt-1.5 leading-relaxed" style={{ color: "var(--warn)" }}>
@@ -713,6 +744,13 @@ function ContributionChart({ step }: { step: RewardStep }) {
           </BarChart>
         </ResponsiveContainer>
       </div>
+      <p className="t-small leading-relaxed mb-2" style={{ color: "var(--text-3)" }}>
+        <strong>Horizontal axis:</strong> the contribution itself — term value
+        × weight, in the score's own units. <strong>Vertical axis:</strong>{" "}
+        one row per term. A bar to the right of the zero line added to the
+        score; a bar to the left subtracted from it. This is the same five
+        numbers as the waterfall above, read side by side instead of as steps.
+      </p>
       <div className="flex items-center justify-between mt-2 pt-2 border-t text-[11.5px]"
            style={{ borderColor: "var(--border-1)" }}>
         <span style={{ color: "var(--text-3)" }}>Sum of contributions</span>
@@ -838,7 +876,14 @@ function ReconciliationCard({ data }: { data: RewardExplain }) {
   );
 }
 
-function FormulaCard({ model }: { model: RewardExplain["model"] }) {
+function FormulaCard({
+  model, step,
+}: {
+  model: RewardExplain["model"];
+  /** The currently-inspected step, if any, so the worked example below the
+      formula can use real recorded numbers instead of invented ones. */
+  step?: RewardStep | null;
+}) {
   return (
     <Card
       title="What goes into the score"
@@ -869,10 +914,11 @@ function FormulaCard({ model }: { model: RewardExplain["model"] }) {
             <p className="text-[11.5px] leading-relaxed" style={{ color: "var(--text-2)" }}>
               {term.plain}
             </p>
-            <Details summary="How it is measured and scaled">
-              <p className="mb-1"><strong>Measured:</strong> {term.measured}</p>
-              <p><strong>Scaled:</strong> {term.normalisation}</p>
-            </Details>
+            <div className="mt-2 pt-2 border-t text-[11px] leading-relaxed"
+                 style={{ borderColor: "var(--hairline)", color: "var(--text-3)" }}>
+              <p className="mb-1"><strong style={{ color: "var(--text-2)" }}>Measured:</strong> {term.measured}</p>
+              <p><strong style={{ color: "var(--text-2)" }}>Scaled:</strong> {term.normalisation}</p>
+            </div>
           </div>
         ))}
       </div>
@@ -893,19 +939,78 @@ function FormulaCard({ model }: { model: RewardExplain["model"] }) {
         </p>
       </div>
 
-      <Details summary="Normalisation references and known limitations">
-        <p className="mb-1"><strong>Normalisation references</strong></p>
-        <ul className="list-disc pl-5 space-y-0.5 mb-3">
+      {step && <WorkedExample step={step} />}
+
+      <div className="mt-3 pt-3 border-t" style={{ borderColor: "var(--hairline)" }}>
+        <p className="t-label mb-1.5" style={{ color: "var(--text-4)" }}>
+          Normalisation references
+        </p>
+        <ul className="list-disc pl-5 space-y-0.5 mb-4 text-[11px] leading-relaxed"
+            style={{ color: "var(--text-3)" }}>
           {Object.entries(model.normalisers).map(([k, v]) => (
             <li key={k}><span className="mono">{k}</span> = {String(v)}</li>
           ))}
         </ul>
-        <p className="mb-1"><strong>Limitations you should know about</strong></p>
-        <ul className="list-disc pl-5 space-y-1">
+        <p className="t-label mb-1.5" style={{ color: "var(--text-4)" }}>
+          Limitations you should know about
+        </p>
+        <ul className="list-disc pl-5 space-y-1 text-[11px] leading-relaxed"
+            style={{ color: "var(--text-3)" }}>
           {model.caveats.map((c, i) => <li key={i}>{c}</li>)}
         </ul>
-      </Details>
+      </div>
     </Card>
+  );
+}
+
+/** A worked example, filled in with the actually-recorded numbers for the
+    step currently selected above — so the formula is not just an abstract
+    expression, it is shown producing the exact score already on screen. */
+function WorkedExample({ step }: { step: RewardStep }) {
+  const rows = step.contributions.filter((c) => c.contribution !== null);
+  if (!rows.length) return null;
+
+  return (
+    <div
+      className="mt-3 rounded-lg border px-3 py-2.5"
+      style={{ borderColor: "var(--rl-ring)", background: "var(--rl-dim)" }}
+    >
+      <p className="t-label mb-1.5" style={{ color: "var(--rl)" }}>
+        Worked example — step {step.step}, the interval shown above
+      </p>
+      <div className="mono text-[11px] leading-relaxed" style={{ color: "var(--text-2)" }}>
+        {rows.map((c, i) => (
+          <div key={c.key}>
+            {i === 0 ? "reward = " : "       "}
+            {c.sign > 0 ? "" : "- "}
+            {fmtNumber(Math.abs(c.weight ?? 0), 2)} × {fmtNumber(c.term_value, 3)}
+            <span style={{ color: "var(--text-4)" }}> ({c.label.toLowerCase()})</span>
+          </div>
+        ))}
+        <div className="pt-1 mt-1 border-t" style={{ borderColor: "var(--hairline)" }}>
+          {"     = "}
+          {rows.map((c, i) => (
+            <span key={c.key}>
+              {i > 0 && (c.contribution ?? 0) >= 0 ? " + " : i > 0 ? " - " : ""}
+              {fmtNumber(Math.abs(c.contribution ?? 0), 4)}
+            </span>
+          ))}
+          {" = "}
+          <strong style={{ color: step.reward != null && step.reward >= 0 ? "var(--ok)" : "var(--bad)" }}>
+            {fmtNumber(step.reward, 4)}
+          </strong>
+          {step.clipped && (
+            <span style={{ color: "var(--warn)" }}> (clamped to the [-1, 1] range)</span>
+          )}
+        </div>
+      </div>
+      <p className="t-micro leading-relaxed mt-2" style={{ color: "var(--text-4)" }}>
+        Every number here is read from this step's recorded row, not
+        recomputed — see &ldquo;Does the breakdown add up?&rdquo; above for
+        the exact check. Pick a different step from &ldquo;Inspect an
+        interval&rdquo; to see this worked example update to match it.
+      </p>
+    </div>
   );
 }
 

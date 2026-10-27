@@ -24,7 +24,7 @@ import type {
   Decision, DecodedState, QValueRow, RewardStep, StepVerification,
 } from "../api/types";
 import {
-  Card, ChartLegend, Details, Pill, StatusDot, fmtNumber, tooltipStyle,
+  Card, ChartLegend, Pill, StatusDot, fmtNumber, tooltipStyle,
 } from "../components/ui";
 
 const STAGES = [
@@ -162,13 +162,17 @@ function StageObserve({ decoded, decision }: { decoded?: DecodedState; decision:
             <Bin label="Flow-table occupancy" value={decoded.occupancy?.label} />
             <Bin label="Table-miss rate" value={decoded.miss_rate?.label} />
           </div>
-          <Details summary="Encoded state key">
-            <p className="mono">{decoded.raw}</p>
+          <div className="mt-2 pt-2 border-t t-micro leading-relaxed"
+               style={{ borderColor: "var(--hairline)", color: "var(--text-4)" }}>
+            <p>
+              Encoded state key: <span className="mono">{decoded.raw}</span>
+            </p>
             <p className="mt-1">
               This exact 4-digit key is how the agent's Q-table is indexed —
-              every state with this key shares one row of learned values.
+              every state with this key shares one row of learned values, no
+              matter which run or step produced it.
             </p>
-          </Details>
+          </div>
         </>
       ) : (
         <p className="t-small" style={{ color: "var(--text-3)" }}>
@@ -292,6 +296,13 @@ function StageAction({
           ]}
           note="bar length is the Q-value before this decision"
         />
+      )}
+      {rows.length > 0 && (
+        <p className="t-micro leading-relaxed mt-1.5" style={{ color: "var(--text-4)" }}>
+          <strong>Vertical axis:</strong> every action allowed from this state.{" "}
+          <strong>Bar length:</strong> its Q-value — the agent's current estimate
+          of that action&rsquo;s long-run value, before this decision updates it.
+        </p>
       )}
     </StageCard>
   );
@@ -457,6 +468,12 @@ function StageReward({ rewardStep, className }: { rewardStep?: RewardStep; class
           </BarChart>
         </ResponsiveContainer>
       </div>
+      <p className="t-micro leading-relaxed" style={{ color: "var(--text-4)" }}>
+        <strong>Horizontal axis:</strong> each term in the formula, applied in
+        order, ending in the final reward. <strong>Vertical axis:</strong> the
+        running total as each term is added — green raises it, red lowers it,
+        and the last bar is the result.
+      </p>
       <div className="flex items-center justify-between mt-1 pt-2 border-t t-small"
            style={{ borderColor: "var(--border-1)" }}>
         <span style={{ color: "var(--text-3)" }}>
@@ -530,23 +547,40 @@ function StageLearn({
         )}. A positive error raises the value for next time this state is
         seen; a negative one lowers it.
       </p>
-      <Details summary="Exact update rule">
+      <div className="mt-2 pt-2 border-t t-small leading-relaxed"
+           style={{ borderColor: "var(--hairline)", color: "var(--text-2)" }}>
+        <p className="t-label mb-1" style={{ color: "var(--text-4)" }}>
+          Exact update rule
+        </p>
         <code className="block mono text-[10.5px] rounded-lg border px-2.5 py-2 mb-1.5"
               style={{ background: "var(--surface-0)", borderColor: "var(--border-1)" }}>
           Q(s,a) ← Q(s,a) + α · (r + γ·max Q(s′,·) − Q(s,a))
         </code>
-        {agentConfig?.alpha !== undefined && (
-          <p>
-            For this run: α (learning rate) = {fmtNumber(agentConfig.alpha, 3)},
-            {" "}γ (discount) = {fmtNumber(agentConfig.gamma, 3)}.
+        <p className="t-micro" style={{ color: "var(--text-4)" }}>
+          s = the state observed, a = the action taken, r = the reward just
+          received, s′ = the state observed next, max Q(s′,·) = the best
+          value this state&rsquo;s own next row currently holds. α and γ are
+          fixed per run, not learned.
+        </p>
+        {agentConfig?.alpha !== undefined && before !== null && after !== null
+          && decision.td_error !== null && (
+          <p className="mono t-micro mt-2 pt-2 border-t" style={{ borderColor: "var(--hairline)", color: "var(--text-3)" }}>
+            For this step: Q(s,a) = {fmtNumber(before, 4)} +{" "}
+            {fmtNumber(agentConfig.alpha, 2)} × ({fmtNumber(decision.td_error, 4)}){" "}
+            = {fmtNumber(after, 4)}
+            <span className="block mt-0.5" style={{ color: "var(--text-4)" }}>
+              (r + γ·max Q(s′,·) − Q(s,a)) was recorded directly as the
+              TD error above; α (learning rate) = {fmtNumber(agentConfig.alpha, 3)},{" "}
+              γ (discount) = {fmtNumber(agentConfig.gamma, 3)} for this run.
+            </span>
           </p>
         )}
-        <p className="mt-1">
+        <p className="mt-1.5">
           This updates only the one (state, action) cell that was just taken —
           not the whole table, and not the agent's future exploration beyond
           what this one value now implies.
         </p>
-      </Details>
+      </div>
     </StageCard>
   );
 }

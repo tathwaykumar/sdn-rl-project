@@ -431,6 +431,39 @@ function HeadlineChart({
             note={`n per cell shown on hover · ${data.runs_analysed} runs`}
           />
 
+          <div className="mb-4 pb-4 border-b t-small leading-relaxed"
+               style={{ borderColor: "var(--border-1)", color: "var(--text-2)" }}>
+            <p className="t-label mb-1.5" style={{ color: "var(--text-4)" }}>
+              Reading this chart
+            </p>
+            <p className="mb-1.5">
+              <strong>Horizontal axis:</strong> workload. <strong>Vertical
+              axis:</strong> {metric.label}
+              {metric.unit ? ` (${metric.unit})` : ""}. Each <strong>bar</strong>{" "}
+              is the <strong>mean</strong> across that cell's seeds — the sum
+              of the measured values divided by how many there are.
+              The <strong>whisker</strong> above and below each bar is the{" "}
+              <strong>95% confidence interval</strong> around that mean: a
+              range calculated from the sample's own spread (its standard
+              deviation) using Student&rsquo;s t-distribution, which is the
+              standard way to express uncertainty for a small sample like
+              this rather than guessing a single number is exactly right.
+              With only five seeds per cell, that interval is often wide —
+              hover a bar to see the exact mean, median, IQR and n.
+            </p>
+            <p>
+              The numeric tables elsewhere on this page report the{" "}
+              <strong>median</strong> (the middle value when the seeds are
+              sorted) with its <strong>IQR</strong>, the interquartile range —
+              the spread of the middle half of the seeds, from the 25th to
+              the 75th percentile. Median and IQR are less swayed by one
+              unusual seed than mean and standard deviation are, which is why
+              they are the project&rsquo;s primary reported figure; the chart
+              above uses mean and a confidence interval instead because that
+              is what the overlap test below needs.
+            </p>
+          </div>
+
           <Takeaway data={data} metric={metric} baseline={baseline} />
           <VerdictMatrix data={data} metric={metric} baseline={baseline} />
         </>
@@ -630,10 +663,16 @@ function VerdictMatrix({
         </table>
       </div>
       <p className="t-small mt-2 leading-relaxed" style={{ color: "var(--text-4)" }}>
-        A difference is called real only when the 95% intervals do not overlap.
-        &ldquo;Not distinguishable&rdquo; means the evidence at five seeds per
-        cell cannot separate them — it is not a finding of no difference, and a
-        percentage shown beside it is a direction, not a result.
+        A difference is called real only when the 95% confidence intervals of
+        the two variants&rsquo; <em>means</em> do not overlap —{" "}
+        <strong>improved</strong> or <strong>regressed</strong>.
+        &ldquo;Not distinguishable&rdquo; means they do overlap: the evidence
+        at this sample size cannot separate the variants, which is not the
+        same as finding no difference. The percentage beside each badge is a
+        separate figure — the change between the two variants&rsquo;{" "}
+        <em>medians</em>, not their means — so read it as which way the
+        typical run moved, not as the number the badge's verdict was decided
+        from.
       </p>
     </div>
   );

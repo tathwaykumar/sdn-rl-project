@@ -19,6 +19,53 @@ import {
   StatusDot, VARIANT_COLOR, cx, fmtDuration, inputClass, inputStyle,
 } from "../components/ui";
 
+/** What each workload actually offers and why the project includes it —
+    verified against `experiments/workloads.py`, which is where the traffic
+    each one generates is implemented. The dashboard's own one-line hints
+    (shown under the Workload dropdown below) come from the backend's
+    `_WORKLOAD_HELP`; this panel is the fuller version of the same facts. */
+const WORKLOAD_EXPLAIN: {
+  id: string; offers: string; tests: string; lookAt: string;
+}[] = [
+  {
+    id: "light",
+    offers: "One flow at 1 Mbit/s. Path A (the short, 5 Mbit path) is "
+      + "genuinely the better choice here — it is never close to full.",
+    tests: "Whether a policy over-reacts: does it needlessly move traffic "
+      + "to path B when the small path is already enough?",
+    lookAt: "Throughput should be fully delivered on any variant; a policy "
+      + "that still spreads load here is paying a cost for nothing.",
+  },
+  {
+    id: "heavy",
+    offers: "Two saturating TCP flows started together — more combined "
+      + "load than path A's 5 Mbit capacity can carry.",
+    tests: "Whether an adaptive policy spills the second flow onto path B "
+      + "instead of overloading path A and dropping or queueing traffic.",
+    lookAt: "Throughput and packet loss. A/B/C Comparison is where this "
+      + "gets tested for real, across seeds.",
+  },
+  {
+    id: "churn",
+    offers: "24 short flows (4s each), distinct source/destination/port "
+      + "combinations, arriving on a seeded schedule.",
+    tests: "Flow-table management: each new flow costs a table miss and a "
+      + "controller round trip. This is the workload where variant C's "
+      + "idle-timeout choice has something real to gain or lose.",
+    lookAt: "Flow-table occupancy and controller load, on the Metrics page "
+      + "or the flow-table panels below it.",
+  },
+  {
+    id: "failure",
+    offers: "The heavy workload, plus a scripted cut of the link s1–s2 "
+      + "partway through the run, then its repair.",
+    tests: "Reconvergence: how quickly and correctly a policy reacts once "
+      + "the path it was using goes down.",
+    lookAt: "The event feed and Live Topology around the failure time, and "
+      + "link-failure recovery time where it is reported.",
+  },
+];
+
 export function ExperimentsView() {
   const options = useAsync<ExperimentOptions>(() => api.experimentOptions(), []);
   const status = useAsync<ExperimentStatus>(() => api.experimentStatus(), [], 3000);
@@ -110,6 +157,32 @@ export function ExperimentsView() {
           { term: "Seed", def: "Fixes randomness so a run can be reproduced exactly." },
         ]}
       />
+
+      <Card title="What each workload tests" className="mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {WORKLOAD_EXPLAIN.map((w) => (
+            <div key={w.id} className="rounded-lg px-3 py-2.5" style={{ background: "var(--surface-2)" }}>
+              <p className="t-small font-semibold mb-1">{w.id}</p>
+              <p className="t-small leading-relaxed mb-1.5" style={{ color: "var(--text-2)" }}>
+                {w.offers}
+              </p>
+              <p className="t-micro leading-relaxed" style={{ color: "var(--text-3)" }}>
+                <strong style={{ color: "var(--text-2)" }}>Tests:</strong> {w.tests}
+              </p>
+              <p className="t-micro leading-relaxed mt-1" style={{ color: "var(--text-4)" }}>
+                <strong>Look at:</strong> {w.lookAt}
+              </p>
+            </div>
+          ))}
+        </div>
+        <p className="t-micro leading-relaxed mt-3" style={{ color: "var(--text-4)" }}>
+          Every workload is driven by a seeded random generator, so the same
+          (workload, seed) pair offers identical traffic to every variant —
+          any difference in the results comes from the controller's routing
+          choices, not from different traffic being offered.
+        </p>
+      </Card>
+
       <div className="grid grid-cols-1 xl:grid-cols-[400px_1fr] gap-4">
       <div className="flex flex-col gap-4">
         <Card title="Start a run" subtitle="Invokes experiments/run_experiment.py directly">

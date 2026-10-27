@@ -21,7 +21,7 @@ import type {
   Decision, LiveSnapshot, MetricSeries, RewardExplain,
 } from "../api/types";
 import {
-  AboutPanel, Card, ChartLegend, Details, Empty, ErrorBox, PATH_COLOR, Pill,
+  AboutPanel, Card, ChartLegend, Empty, ErrorBox, PATH_COLOR, Pill,
   Skeleton, SourceBadge, StatusDot, cx, tooltipStyle,
   fmtNumber, fmtTime,
 } from "../components/ui";
@@ -408,13 +408,24 @@ function DecisionTimeline({
         note="click anywhere to inspect the nearest decision"
       />
 
-      <Details summary="What this shows, and what it cannot">
-        <ul className="space-y-1.5 leading-relaxed">
+      <div className="mt-3 pt-3 border-t" style={{ borderColor: "var(--hairline)" }}>
+        <p className="t-small leading-relaxed mb-2" style={{ color: "var(--text-3)" }}>
+          <strong>Horizontal axis:</strong> seconds since the run started.{" "}
+          <strong>Left vertical axis:</strong> delivered throughput in Mbit/s
+          (the filled area). <strong>Right vertical axis:</strong> the busiest
+          link's utilisation as a percentage (the dashed line). The coloured
+          bands show which path the agent had selected during each stretch of
+          time; the colour key for path A vs path B is in the legend above.
+        </p>
+        <p className="t-label mb-1.5" style={{ color: "var(--text-4)" }}>
+          What this shows, and what it cannot
+        </p>
+        <ul className="space-y-1.5 leading-relaxed t-small" style={{ color: "var(--text-2)" }}>
           <li>
             <strong>The bands are intent.</strong> They mark the path the agent
             selected for each interval. Whether the switches actually carried
             traffic that way is a separate question, answered per decision in
-            the journey above from the switches&rsquo; own flow tables.
+            the journey below from the switches&rsquo; own flow tables.
           </li>
           <li>
             <strong>Alignment is not causation.</strong> The workload and the
@@ -429,7 +440,7 @@ function DecisionTimeline({
             counters, both on the same polling clock as the decisions.
           </li>
         </ul>
-      </Details>
+      </div>
     </Card>
   );
 }
