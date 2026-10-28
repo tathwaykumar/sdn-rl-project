@@ -418,8 +418,20 @@ class BaseSdnApp(app_manager.OSKenApp):
         # the flow pair together; doing so also keeps forward and reverse
         # traffic symmetric, without which RTT measurements would mix two
         # different paths and be uninterpretable.
-        self._install_path(src.name, dst.name, path, proto, sport, dport, idle)
-        self._install_path(dst.name, src.name, path, proto, dport, sport, idle)
+        installed_fwd = self._install_path(src.name, dst.name, path, proto, sport, dport, idle)
+        installed_rev = self._install_path(dst.name, src.name, path, proto, dport, sport, idle)
+
+        # The only way a PacketIn reaches this handler is the priority-0
+        # table-miss rule (the IPv6 discard rule has no actions and never
+        # forwards to the controller), so every call here is a genuine
+        # miss->FlowMod response -- recorded once per miss, not once per
+        # installed hop, so it reads as one pipeline step rather than noise.
+        self.writers.event(
+            "flow_installed",
+            f"trigger=table_miss switch={spec.SWITCH_BY_DPID.get(dp.id)} "
+            f"{src.name}->{dst.name} proto={proto} path={path} "
+            f"idle_timeout={idle}s rules_installed={installed_fwd + installed_rev}",
+        )
 
         # Forward the packet that triggered this, so the first packet of a flow
         # is not dropped (which TCP would see as loss and back off from).
