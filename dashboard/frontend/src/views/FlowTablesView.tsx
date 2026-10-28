@@ -12,7 +12,7 @@ import { useAsync } from "../hooks/useLive";
 import type { FlowRule, FlowTablePayload } from "../api/types";
 import {
   Button, Card, Empty, ErrorBox, Pill, Skeleton, SourceBadge,
-  cx, fmtBytes, fmtNumber, inputClass, inputStyle,
+  cx, fmtBytes, fmtNumber, fmtTime, inputClass, inputStyle,
 } from "../components/ui";
 
 const SWITCHES = ["s1", "s2", "s3", "s4", "s5"];
@@ -45,6 +45,13 @@ export function FlowTablesView({ runId }: { runId?: string }) {
   const [kindFilter, setKindFilter] = useState<string>("all");
   const [sortKey, setSortKey] = useState<SortKey>("priority");
   const [sortDesc, setSortDesc] = useState(true);
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const toggleExpanded = (i: number) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i); else next.add(i);
+      return next;
+    });
 
   const { data, loading, error, refresh } = useAsync<FlowTablePayload>(
     () => api.flows(undefined, runId),
@@ -134,7 +141,7 @@ export function FlowTablesView({ runId }: { runId?: string }) {
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_300px] gap-4 min-h-0">
         <Card
           title={`Flow table — ${selected}`}
-          subtitle={data.note}
+          subtitle={data.note ? `${data.note} · Source → Destination → Hop at a glance; click “Details” on a row for the rest.` : "Source → Destination → Hop at a glance; click “Details” on a row for the rest."}
           right={
             <div className="flex items-center gap-2">
               <SourceBadge source={data.source} age={data.age_s} stale={data.stale} />
@@ -195,13 +202,19 @@ export function FlowTablesView({ runId }: { runId?: string }) {
                   style={{ background: "var(--surface-2)" }}
                 >
                   <tr style={{ color: "var(--text-3)" }}>
-                    <Th>Kind</Th><Th>Prio</Th><Th>Match</Th><Th>Actions</Th>
-                    <Th right>Idle</Th><Th right>Hard</Th><Th right>Age</Th>
-                    <Th right>Packets</Th><Th right>Bytes</Th><Th>Cookie</Th>
+                    <Th>Kind</Th><Th>Source</Th><Th>Destination</Th><Th>Hop</Th>
+                    <Th right> </Th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rules.map((r, i) => <RuleRow key={i} rule={r} />)}
+                  {rules.map((r, i) => (
+                    <RuleRow
+                      key={i}
+                      rule={r}
+                      expanded={expanded.has(i)}
+                      onToggle={() => toggleExpanded(i)}
+                    />
+                  ))}
                 </tbody>
               </table>
             )}
@@ -275,44 +288,77 @@ function Th({ children, right }: { children: React.ReactNode; right?: boolean })
   );
 }
 
-function RuleRow({ rule }: { rule: FlowRule }) {
+function RuleRow({
+  rule, expanded, onToggle,
+}: {
+  rule: FlowRule;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   const kind = KIND_STYLE[rule.kind] ?? KIND_STYLE.infrastructure;
-  const match =
-    rule.nw_src && rule.nw_dst
-      ? `${rule.proto ?? "ip"} ${rule.nw_src} → ${rule.nw_dst}`
-      : rule.kind === "table_miss"
-        ? "* (catch-all)"
-        : rule.proto ?? "*";
-  const action =
+  const isCatchAll = rule.kind === "table_miss" || !(rule.nw_src && rule.nw_dst);
+  const source = isCatchAll ? "any host" : rule.nw_src;
+  const destination = isCatchAll ? "any host" : rule.nw_dst;
+  const hop =
     rule.output_port === "CONTROLLER"
-      ? "→ CONTROLLER"
+      ? "sent to controller"
       : rule.output_port === "drop"
-        ? "drop"
+        ? "dropped"
         : rule.output_port
-          ? `→ port ${rule.output_port}`
+          ? `out port ${rule.output_port}`
           : "—";
+
   return (
-    <tr
-      className="border-t hover:bg-[var(--hover-wash-soft)]"
-      style={{ borderColor: "var(--border-1)" }}
-    >
-      <td className="px-3 py-1.5">
-        <Pill color={kind.color} title={kind.title}>{kind.label}</Pill>
-      </td>
-      <td className="px-3 py-1.5 num">{rule.priority}</td>
-      <td className="px-3 py-1.5 mono truncate max-w-[220px]" title={rule.raw}>{match}</td>
-      <td className="px-3 py-1.5 mono">{action}</td>
-      <td className="px-3 py-1.5 num text-right">
-        {rule.idle_timeout ?? "—"}
-      </td>
-      <td className="px-3 py-1.5 num text-right">{rule.hard_timeout ?? "—"}</td>
-      <td className="px-3 py-1.5 num text-right">
-        {rule.duration_s !== null ? `${fmtNumber(rule.duration_s, 1)}s` : "—"}
-      </td>
-      <td className="px-3 py-1.5 num text-right">{rule.n_packets.toLocaleString()}</td>
-      <td className="px-3 py-1.5 num text-right">{fmtBytes(rule.n_bytes)}</td>
-      <td className="px-3 py-1.5 mono" style={{ color: "var(--text-3)" }}>{rule.cookie}</td>
-    </tr>
+    <>
+      <tr
+        className="border-t hover:bg-[var(--hover-wash-soft)] cursor-pointer"
+        style={{ borderColor: "var(--border-1)" }}
+        onClick={onToggle}
+      >
+        <td className="px-3 py-1.5">
+          <Pill color={kind.color} title={kind.title}>{kind.label}</Pill>
+        </td>
+        <td className="px-3 py-1.5 mono">{source}</td>
+        <td className="px-3 py-1.5 mono">{destination}</td>
+        <td className="px-3 py-1.5 mono">{hop}</td>
+        <td className="px-3 py-1.5 text-right whitespace-nowrap">
+          <span className="text-[10px]" style={{ color: "var(--accent)" }}>
+            {expanded ? "Hide details ▾" : "Details ▸"}
+          </span>
+        </td>
+      </tr>
+      {expanded && (
+        <tr className="border-t" style={{ borderColor: "var(--border-1)" }}>
+          <td colSpan={5} className="px-3 py-3" style={{ background: "var(--surface-2)" }}>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Detail label="Priority" value={String(rule.priority)} />
+              <Detail label="Protocol" value={rule.proto ?? "*"} />
+              <Detail label="Idle timeout" value={rule.idle_timeout != null ? `${rule.idle_timeout}s` : "—"} />
+              <Detail label="Hard timeout" value={rule.hard_timeout != null ? `${rule.hard_timeout}s` : "—"} />
+              <Detail label="Age" value={rule.duration_s !== null ? `${fmtNumber(rule.duration_s, 1)}s` : "—"} />
+              <Detail label="Installed at" value={rule.installed_at != null ? fmtTime(rule.installed_at) : "—"} />
+              <Detail label="Packets matched" value={rule.n_packets.toLocaleString()} />
+              <Detail label="Bytes matched" value={fmtBytes(rule.n_bytes)} />
+              <Detail label="Cookie" value={rule.cookie ?? "—"} mono />
+            </div>
+            {rule.raw && (
+              <p className="text-[10px] mt-3 mono truncate" style={{ color: "var(--text-4)" }} title={rule.raw}>
+                raw: {rule.raw}
+              </p>
+            )}
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function Detail({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div>
+      <p className="text-[10px]" style={{ color: "var(--text-4)" }}>{label}</p>
+      <p className={cx("text-[12px]", mono && "mono")} style={{ color: "var(--text-1)" }}>{value}</p>
+    </div>
   );
 }
 
