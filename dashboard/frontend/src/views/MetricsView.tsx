@@ -41,19 +41,56 @@ export function MetricsView({
     runId ? undefined : 3000,
   );
 
+  // The *last row written* can be an invalid interval (a counter reset) or,
+  // for a completed run, a quiet tail sample taken after traffic had already
+  // stopped but before the controller tore down -- neither is what "current
+  // reading" should mean. The last VALID row is the right fallback for the
+  // supporting readings (occupancy, rates); the headline throughput figure
+  // additionally uses the run's peak below, since a tail-of-run reading of
+  // ~0 badly undersells a run that is otherwise shown, chart and all, right
+  // next to it.
+  const validPoints = (series.data?.points ?? []).filter((p) => p.valid);
+  const lastValidPoint = validPoints.length ? validPoints[validPoints.length - 1] : undefined;
+
   const live: LiveMetrics | undefined =
     (!runId ? snapshot?.metrics : undefined) ??
-    (series.data?.points.length
+    (lastValidPoint
       ? {
           available: true,
-          source: series.data.source,
-          t: series.data.points[series.data.points.length - 1].t,
-          interval_s: series.data.interval_s ?? null,
-          age_s: series.data.age_s ?? null,
-          values: series.data.points[series.data.points.length - 1] as Record<string, number | null>,
-          metric_meta: series.data.metric_meta,
+          source: series.data?.source ?? "unavailable",
+          t: lastValidPoint.t as number,
+          interval_s: series.data?.interval_s ?? null,
+          age_s: series.data?.age_s ?? null,
+          values: lastValidPoint as Record<string, number | null>,
+          metric_meta: series.data?.metric_meta,
         }
       : undefined);
+
+  const peakThroughputMbit = runId && validPoints.length
+    ? Math.max(...validPoints.map((p) => ((p.delivered_bps as number) ?? 0))) / 1e6
+    : null;
+
+  // Same reasoning as the throughput headline above: a completed run's last
+  // valid interval is reliably a quiet, post-traffic moment (the dataplane
+  // idles or the controller flushes routed flows before the process exits),
+  // so every supporting reading would otherwise read as "nothing happened"
+  // regardless of what the run actually did. Each reading here is pinned to
+  // the interval where *that* reading peaked, not to one shared moment --
+  // "peak link utilisation" and "peak table occupancy" don't necessarily
+  // land on the same second, and claiming they did would be inventing a
+  // correlation the data doesn't show.
+  const peakBy = (key: string): Record<string, number | null> | undefined => {
+    if (!runId || !validPoints.length) return undefined;
+    return validPoints.reduce((best, p) =>
+      ((p[key] as number) ?? -Infinity) > ((best[key] as number) ?? -Infinity) ? p : best,
+    ) as Record<string, number | null>;
+  };
+  const utilSrc = peakBy("max_link_util");
+  const occupancySrc = peakBy("total_rules");
+  const missSrc = peakBy("miss_rate_per_s");
+  const packetInSrc = peakBy("packet_in_rate");
+  const flowModSrc = peakBy("flow_mod_rate");
+  const peakSuffix = runId ? " (peak)" : "";
 
   const latency = (!runId ? snapshot?.latency : undefined) ?? latencyQuery.data ?? undefined;
 
@@ -141,10 +178,19 @@ export function MetricsView({
         <div className="space-y-5 min-w-0">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <MetricCard
-              label="Throughput (delivered)"
-              value={fmtNumber(((values.delivered_bps as number) ?? 0) / 1e6, 2)}
+              label={peakThroughputMbit !== null ? "Throughput (peak)" : "Throughput (delivered)"}
+              value={fmtNumber(
+                peakThroughputMbit !== null
+                  ? peakThroughputMbit
+                  : ((values.delivered_bps as number) ?? 0) / 1e6,
+                2,
+              )}
               unit="Mbit/s"
-              sub="host-facing egress counters"
+              sub={
+                peakThroughputMbit !== null
+                  ? "highest interval reached this run · host-facing egress counters"
+                  : "host-facing egress counters"
+              }
               kind={meta.delivered_bps?.kind}
               source={src}
             />
@@ -168,10 +214,17 @@ export function MetricsView({
             data={chartData}
             tall
             lines={[{ key: "throughput", label: "Mbit/s", color: "var(--accent)" }]}
+            caption="Higher is better. A rising line means more data is reaching the hosts each second; a flat line near the workload's capacity usually means the link carrying traffic is saturated, not that something is broken."
           />
         </div>
 
-        <Card title="Supporting readings" className="xl:row-span-1">
+        <Card
+          title="Supporting readings"
+          subtitle={runId
+            ? "Each reading below is this run's own peak interval for that reading, not one shared moment"
+            : undefined}
+          className="xl:row-span-1"
+        >
           <div>
             <SpecRow
               label="Packet loss"
@@ -201,33 +254,33 @@ export function MetricsView({
               explain="Delivered, but only after the next probe was due. A symptom of queueing, not loss."
             />
             <SpecRow
-              label="Max link utilisation"
-              value={fmtNumber(((values.max_link_util as number) ?? 0) * 100, 1)}
+              label={`Max link utilisation${peakSuffix}`}
+              value={fmtNumber((((utilSrc ?? values).max_link_util as number) ?? 0) * 100, 1)}
               unit="%"
-              note={`A ${fmtPercent(values.util_A as number, 0)} · B ${fmtPercent(values.util_B as number, 0)}`}
-              tone={((values.max_link_util as number) ?? 0) > 0.9 ? "warn" : undefined}
+              note={`A ${fmtPercent((utilSrc ?? values).util_A as number, 0)} · B ${fmtPercent((utilSrc ?? values).util_B as number, 0)}`}
+              tone={(((utilSrc ?? values).max_link_util as number) ?? 0) > 0.9 ? "warn" : undefined}
             />
             <SpecRow
-              label="Flow-table occupancy"
-              value={fmtNumber(values.total_rules as number, 0)}
+              label={`Flow-table occupancy${peakSuffix}`}
+              value={fmtNumber((occupancySrc ?? values).total_rules as number, 0)}
               unit="rules"
               note="routed rules across all switches"
             />
             <SpecRow
-              label="Table misses"
-              value={fmtNumber(values.table_misses as number, 0)}
+              label={`Table misses${peakSuffix}`}
+              value={fmtNumber((missSrc ?? values).table_misses as number, 0)}
               unit="packets"
-              note={`${fmtNumber(values.miss_rate_per_s as number, 1)} /s`}
+              note={`${fmtNumber((missSrc ?? values).miss_rate_per_s as number, 1)} /s`}
             />
             <SpecRow
-              label="Controller PacketIn"
-              value={fmtNumber(values.packet_in_rate as number, 1)}
+              label={`Controller PacketIn${peakSuffix}`}
+              value={fmtNumber((packetInSrc ?? values).packet_in_rate as number, 1)}
               unit="msg/s"
               note="reactive load"
             />
             <SpecRow
-              label="Controller FlowMod"
-              value={fmtNumber(values.flow_mod_rate as number, 1)}
+              label={`Controller FlowMod${peakSuffix}`}
+              value={fmtNumber((flowModSrc ?? values).flow_mod_rate as number, 1)}
               unit="msg/s"
               note="rule installations"
             />
@@ -249,12 +302,14 @@ export function MetricsView({
               { key: "utilA", label: "Path A", color: PATH_COLOR.A },
               { key: "utilB", label: "Path B", color: PATH_COLOR.B },
             ]}
+            caption="How full each candidate path is, as a % of its own link capacity. If one line sits near 100% while the other stays low, traffic is being forced onto one path instead of spread across both — the thing variants B/C try to improve on."
           />
           <Chart
             title="Flow-table occupancy"
             subtitle="Routed rules across all switches"
             data={chartData}
             lines={[{ key: "rules", label: "rules", color: "var(--rl)" }]}
+            caption="How many forwarding rules the switches are holding right now. A steady climb means rules aren't expiring fast enough for the traffic (idle timeout too long); a flat line means the table has settled at a steady size."
           />
           <Chart
             title="Controller load"
@@ -265,6 +320,7 @@ export function MetricsView({
               { key: "packetIn", label: "PacketIn", color: "var(--warn)" },
               { key: "flowMod", label: "FlowMod", color: "var(--accent)" },
             ]}
+            caption="PacketIn = packets a switch couldn't match locally and sent up to the controller; FlowMod = rules the controller pushed back down in response. Both low and steady is good — frequent spikes mean rules keep expiring and the switch keeps having to ask the controller again."
           />
         </div>
       </div>
@@ -339,7 +395,7 @@ function SpecRow({
 }
 
 function Chart({
-  title, subtitle, data, lines, unit, tall,
+  title, subtitle, data, lines, unit, tall, caption,
 }: {
   title: string;
   subtitle?: string;
@@ -348,6 +404,8 @@ function Chart({
   unit?: string;
   /** The page's primary trace, given roughly twice the plot height. */
   tall?: boolean;
+  /** Plain-language "what this is telling you", shown under the chart. */
+  caption?: string;
 }) {
   if (data.length < 2) {
     return (
@@ -431,6 +489,14 @@ function Chart({
           items={lines.map((l) => ({ label: l.label, color: l.color }))}
           note={unit ? `values in ${unit}` : undefined}
         />
+      )}
+      {caption && (
+        <p
+          className="text-[11px] leading-relaxed mt-2 pt-2 border-t"
+          style={{ color: "var(--text-3)", borderColor: "var(--border-1)" }}
+        >
+          {caption}
+        </p>
       )}
     </Card>
   );
