@@ -11,7 +11,11 @@ you need specifics this file doesn't cover.
   apps — `baseline.py`=A, `rl_route.py`=B, `rl_joint.py`=C, shared Q-learning in
   `rl_mixin.py`), `agent/` (Q-learning, state/action/reward).
 - **Experiments**: `experiments/` (runner, workloads, smoke test) →
-  `results/runs/<run>/` (raw data, **never edited after a run**).
+  `results/runs/<run>/` (raw data, **never edited after a run**). Each run's
+  `raw/events.csv` holds discrete controller events (`controller_start/stop`,
+  `switch_connected/disconnected`, `flow_installed`, `flow_removed`,
+  `link_state_change`, `routed_flows_flushed`) — `flow_installed` only exists
+  on runs recorded after `8207540`.
 - **Analysis**: `analysis/` (aggregate, verify_behaviour, plots, report) →
   `analysis/out/` (derived, regenerated, never edited).
 - **Dashboard**: `dashboard/backend` (FastAPI, unprivileged, reads files from
@@ -30,12 +34,36 @@ you need specifics this file doesn't cover.
 
 ## Current dashboard status (verify against `git log` / `git status` if stale)
 
-Branch `dashboard/console-redesign` has been converting collapsible `<Details>`
-"what this shows" sections into always-visible explanatory text across the
-console (commit `acbefef` "Rebuild the console as an emerald-dark instrument
-with always-visible docs" + uncommitted follow-on work). **Confirm current
-state with `git status`/`git diff` before assuming anything below is still
-pending** — this file is not updated automatically.
+Branch `dashboard/console-redesign`, most recent work first:
+
+- `8494dd4` Fixed Overview and Live Topology going blank for every **recorded**
+  run: Learning Snapshot, the topology mini-map, switch rule-count badges and
+  Confirmed Forwarding all read only the live websocket snapshot (forced null
+  once a run is selected) and had no historical fallback. Each now fetches its
+  own data for a selected run.
+- `3cf53cd` Fixed Metrics & Analytics headline/supporting-reading cards reading
+  as all-zero for a completed run (they used the literal last row of the
+  series, not even filtered for validity — a run's last row is reliably a
+  quiet post-traffic moment). A recorded run now shows each reading's own peak
+  interval, labelled `(peak)`. Also added a plain-language caption under every
+  chart.
+- `2b245af` Simplified the flow table to Kind/Source/Destination/Hop, with a
+  per-row expandable Details panel for everything else (priority, timeouts,
+  age, counters, cookie, and the switch-reported install timestamp).
+- `fced158` Expanded Decision Inspector's own explanation of what it's doing
+  and why (it's where the project's "the learned controller does better"
+  claim gets checked against one real decision at a time).
+- `8207540` The controller now logs a `flow_installed` event (switch, host
+  pair, protocol, path, idle timeout, rules installed) on every table miss,
+  in `events.csv` alongside the pre-existing `flow_removed`/`link_state_change`
+  events — previously FlowMod installs were only counted (`flow_mod_rate`),
+  never logged individually. Only present in runs recorded after this change.
+
+Earlier: `cd8e36f` (Reward Explorer/Decision Inspector/Comparison/Experiments
+got their own always-visible explanatory text), `acbefef` (console rebuilt as
+an emerald-dark instrument). **Confirm current state with `git status`/
+`git diff` before assuming anything here is still accurate** — this file is
+not updated automatically.
 
 ## A/B/C variants, workloads, reward (verified from README.md)
 
@@ -74,15 +102,13 @@ r = 1.00 * throughput
 
 ## Current unfinished task
 
-Improve beginner-friendly explanations on four dashboard pages: **Reward
-Explorer**, **Decision Inspector**, **A/B/C Comparison**, **Experiments**
-(`dashboard/frontend/src/views/RewardExplorerView.tsx`,
-`DecisionInspectorView.tsx`, `DecisionJourney.tsx`, `ComparisonView.tsx`,
-`ExperimentsView.tsx`). As of the last session these files had uncommitted
-changes in this direction — **check `git diff` on these paths to see current
-state**; do not assume prior session's screenshots (`*.png` in repo root) are
-still accurate. Needs confirmation each session: how much of the mobile-layout
-verification is actually done.
+None known as of this update. The beginner-friendly-explanations pass
+(Reward Explorer, Decision Inspector, A/B/C Comparison, Experiments) and the
+recorded-run data-wiring bugs found while reviewing it are both committed
+(see above). Mobile-layout verification across the console has not been
+explicitly re-checked this session — confirm before assuming it still holds.
+If you start new work, update this section before ending the session so the
+next one doesn't have to rediscover it from `git log`.
 
 ## Usage-saving rules for Claude Code sessions here
 
