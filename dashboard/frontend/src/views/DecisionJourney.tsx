@@ -66,6 +66,18 @@ export function DecisionJourney({
 
   return (
     <div className="space-y-3">
+      <p className="t-small leading-relaxed px-1" style={{ color: "var(--text-3)" }}>
+        Below is the complete, step-by-step record of <strong>one specific
+        decision</strong> (step {decision.step}) — the same 7-stage cycle
+        summarised on the Overview page, but every number here is the real
+        value logged for this exact moment in this exact run, not an
+        illustration. Read it left-to-right, top-to-bottom: the agent first
+        looks at the network (1), picks an action (2), the controller tries
+        to carry that out on the real switches (3), the network reports what
+        actually happened (4), that outcome is scored (5), the agent's
+        internal value table is nudged accordingly (6), and the cycle
+        continues (7).
+      </p>
       <JourneyRail current="action" />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -348,11 +360,24 @@ function StageApply({
   const confirmedPath = verification?.status === "confirmed" ? chosenPath : null;
   return (
     <StageCard n={3} title="Apply Decision" tone="net">
+      <p className="t-small mb-2" style={{ color: "var(--text-2)" }}>
+        The network has exactly two physical routes from h1 to h3: path A
+        (top, the shorter 2-hop route) and path B (bottom, the longer but
+        higher-capacity 3-hop route). The diagram below highlights whichever
+        one this decision selected.
+      </p>
       <MiniPathDiagram chosenPath={chosenPath} confirmedPath={confirmedPath} />
       <div className="flex gap-3 t-micro mb-2" style={{ color: "var(--text-4)" }}>
         <span><span style={{ color: "var(--rl)" }}>┄┄</span> agent's intention</span>
         <span><span style={{ color: "var(--accent)" }}>──</span> confirmed by switches</span>
       </div>
+      <p className="t-micro leading-relaxed mb-2" style={{ color: "var(--text-4)" }}>
+        A dashed line is what the agent <em>wanted</em> — only a claim until
+        checked. A solid line means a flow-table dump taken on the real
+        switches, after this decision, actually shows traffic routed that way.
+        Until that dump exists, the choice is shown dashed even if it will
+        later be confirmed.
+      </p>
       {loading && !verification ? (
         <p className="t-small" style={{ color: "var(--text-4)" }}>Checking switches…</p>
       ) : (
@@ -394,8 +419,12 @@ function StageOutcome({ rewardStep }: { rewardStep?: RewardStep }) {
   return (
     <StageCard n={4} title="Measure Outcome" tone="net">
       <p className="t-small mb-2" style={{ color: "var(--text-2)" }}>
-        What the switches reported for the interval after this action, scaled
-        to 0–1 (the same scaling the reward uses).
+        This is what actually happened in the interval right after the
+        decision above — measured from switch counters, independent of what
+        the agent intended. Each figure is scaled to a common 0–1 range so
+        the five very different quantities below (bits/s, a percentage, a
+        rule count...) can be combined by the reward formula next door; the
+        scaling doesn't change what moved, only the units it's expressed in.
       </p>
       <div className="grid grid-cols-2 gap-1.5">
         {items.map((c) => (
@@ -407,7 +436,8 @@ function StageOutcome({ rewardStep }: { rewardStep?: RewardStep }) {
       </div>
       <p className="t-micro mt-2" style={{ color: "var(--text-4)" }}>
         Normalised values, not raw units — see Metrics &amp; Analytics for the
-        measured throughput/latency/loss for this run.
+        measured throughput/latency/loss for this run in their actual units
+        (Mbit/s, ms, etc).
       </p>
     </StageCard>
   );

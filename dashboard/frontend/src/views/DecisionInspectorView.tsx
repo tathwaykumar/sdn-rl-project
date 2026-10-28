@@ -95,20 +95,28 @@ export function DecisionInspectorView({
     <AboutPanel
       summary={
         <>
-          Follow one decision through its full life cycle: what the agent{" "}
-          <strong>observed</strong>, what it <strong>chose</strong> and why
-          (greedy or exploring), whether the controller actually{" "}
-          <strong>applied</strong> it to the switches, what the network{" "}
-          <strong>measured</strong> afterward, how that became a{" "}
-          <strong>reward</strong>, and how the agent's knowledge{" "}
-          <strong>updated</strong> for next time — all read from recorded
-          data, never inferred.
+          This is where the project's central claim gets checked against
+          evidence, one decision at a time. The overview and the comparison
+          pages report that the learned controller does better — this page is
+          where you can pick any single moment in a run and see exactly why:
+          what the agent <strong>observed</strong> about the network at that
+          instant, what it <strong>chose</strong> and whether that was its
+          best-known move or a deliberate random experiment, whether the
+          controller actually <strong>applied</strong> that choice to the real
+          switches (not just logged an intention), what the network{" "}
+          <strong>measured</strong> as a result, how that outcome became a{" "}
+          <strong>reward</strong> number, and how the agent's internal
+          value table <strong>updated</strong> because of it. Every figure
+          below is read from this run's own recorded files — nothing is
+          simulated or filled in to make the story cleaner.
         </>
       }
       terms={[
         { term: "Greedy", def: "The agent chose its current best-known action." },
         { term: "Exploratory", def: "A random action instead, to keep learning." },
-        { term: "Q-value", def: "The agent's current estimate of an action's long-run value." },
+        { term: "Q-value", def: "The agent's current estimate of an action's long-run value — higher means \"I expect this choice to pay off better over time.\"" },
+        { term: "State", def: "The network condition the agent saw, simplified into 4 coarse bins so a small table can learn it." },
+        { term: "TD error", def: "Temporal-difference error: how wrong the agent's prior estimate was, once the real reward came in." },
       ]}
     />
   );
