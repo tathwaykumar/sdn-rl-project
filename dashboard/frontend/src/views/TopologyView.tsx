@@ -12,7 +12,7 @@ import type {
 } from "../api/types";
 import {
   AboutPanel, Card, Details, Empty, Pill, SourceBadge, StatusDot, fmtAge,
-  fmtBits, fmtPercent,
+  fmtBits, fmtPercent, fmtTime,
 } from "../components/ui";
 import { TopologyCanvas, TopologyLegend, type Selection } from "./TopologyCanvas";
 
@@ -28,6 +28,14 @@ export function TopologyView({
   );
   const flows = useAsync<FlowTablePayload>(
     () => api.flows(undefined, runId), [runId], 6000,
+  );
+  // flow_installed / flow_removed are switch-level evidence of the table-miss
+  // -> FlowMod pipeline, written by the controller as they happen -- not
+  // inferred from the periodic dumps above. Filtered per switch in the
+  // inspector below, so clicking a switch answers "what changed here, and
+  // when" directly from the controller's own log, not a guess.
+  const events = useAsync(
+    () => api.events(runId, 200), [runId], runId ? undefined : 6000,
   );
 
   const live = snapshot?.topology ?? topo.data?.live;
@@ -84,7 +92,8 @@ export function TopologyView({
             selection={selection}
             linkState={live?.link_state ?? {}}
             flows={flows.data}
-            flowCounts={snapshot?.flow_counts ?? {}}
+            flowCounts={flows.data?.counts_by_switch ?? snapshot?.flow_counts ?? {}}
+            events={events.data?.events ?? []}
           />
           <Card title="Legend">
             <TopologyLegend />
@@ -96,13 +105,14 @@ export function TopologyView({
 }
 
 function Inspector({
-  topo, selection, linkState, flows, flowCounts,
+  topo, selection, linkState, flows, flowCounts, events,
 }: {
   topo?: TopologyPayload | null;
   selection: Selection;
   linkState: Record<string, any>;
   flows?: FlowTablePayload | null;
   flowCounts: Record<string, { total: number; routed: number }>;
+  events: { t: number | null; kind: string; detail: string }[];
 }) {
   if (!topo) return <Card title="Inspector"><Empty title="Loading topology" /></Card>;
 
@@ -129,6 +139,17 @@ function Inspector({
     const timeouts = Array.from(
       new Set(routed.map((r) => r.idle_timeout).filter((t) => t != null)),
     ).sort((a, b) => (a as number) - (b as number));
+    // Controller-logged evidence of the table-miss -> FlowMod pipeline for
+    // this one switch, newest first. Distinct from `rules` above: those are
+    // what the switch holds right now (a 5s-stale snapshot); these are the
+    // controller's own record of when each change happened.
+    const switchEvents = node.kind === "switch"
+      ? events
+          .filter((e) => (e.kind === "flow_installed" || e.kind === "flow_removed")
+            && e.detail.includes(`switch=${node.id}`))
+          .sort((a, b) => (b.t ?? 0) - (a.t ?? 0))
+          .slice(0, 8)
+      : [];
 
     return (
       <Card
@@ -187,6 +208,37 @@ function Inspector({
             ) : (
               <p className="t-small" style={{ color: "var(--text-4)" }}>
                 No routed rules on this switch right now.
+              </p>
+            )}
+
+            <p className="t-label mb-1.5" style={{ color: "var(--text-4)" }}>
+              Recent table-miss → flow-install events
+            </p>
+            {switchEvents.length ? (
+              <div className="space-y-1.5 mb-3">
+                {switchEvents.map((e, i) => (
+                  <div key={i} className="t-small rounded-lg px-2 py-1.5"
+                       style={{ background: "var(--surface-2)" }}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex items-center gap-1.5">
+                        <StatusDot tone={e.kind === "flow_installed" ? "ok" : "warn"} />
+                        {e.kind === "flow_installed" ? "installed" : "expired"}
+                      </span>
+                      <span className="t-micro num" style={{ color: "var(--text-4)" }}>
+                        {fmtTime(e.t)}
+                      </span>
+                    </div>
+                    <p className="t-micro truncate mt-0.5" style={{ color: "var(--text-4)" }}
+                       title={e.detail}>
+                      {e.detail}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="t-small mb-3" style={{ color: "var(--text-4)" }}>
+                No table-miss or rule-expiry events recorded for this switch
+                yet in this run.
               </p>
             )}
 

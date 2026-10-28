@@ -20,7 +20,9 @@ import "reactflow/dist/style.css";
 
 import { api } from "../api/client";
 import { useAsync } from "../hooks/useLive";
-import type { LiveSnapshot, TopoLink, TopoNode, TopologyPayload } from "../api/types";
+import type {
+  FlowTablePayload, LiveSnapshot, TopoLink, TopoNode, TopologyPayload,
+} from "../api/types";
 import {
   Empty, ErrorBox, Skeleton, cx, fmtBits, fmtBytes, fmtPercent,
 } from "../components/ui";
@@ -227,7 +229,7 @@ function HostNode({ data }: NodeProps) {
                     + "No current rate: the last two counter samples show no change."
               }
             >
-              <span style={{ opacity: 0.7 }}>TX</span>
+              <span style={{ opacity: 0.7 }}>TX (sent)</span>
               <span>
                 {sending ? fmtBits(traffic.send_bps) : fmtBytes(traffic.sent_bytes)}
               </span>
@@ -245,7 +247,7 @@ function HostNode({ data }: NodeProps) {
                     + "No current rate: the last two counter samples show no change."
               }
             >
-              <span style={{ opacity: 0.7 }}>RX</span>
+              <span style={{ opacity: 0.7 }}>RX (received)</span>
               <span>
                 {receiving
                   ? fmtBits(traffic.receive_bps)
@@ -336,7 +338,14 @@ export function TopologyCanvas({
   const live = snapshot?.topology ?? topo?.live;
   const linkState = live?.link_state ?? {};
   const activePaths = live?.active_paths;
-  const flowCounts = snapshot?.flow_counts ?? {};
+  // The live websocket snapshot carries flow_counts only for a run actually
+  // in progress (forced null for a selected run, same as everywhere else on
+  // this page) -- fetched directly here too, so a recorded run's switch
+  // tiles show real rule counts instead of silently going blank.
+  const flowsQuery = useAsync<FlowTablePayload>(
+    () => api.flows(undefined, runId), [runId], runId ? undefined : 8000,
+  );
+  const flowCounts = flowsQuery.data?.counts_by_switch ?? snapshot?.flow_counts ?? {};
   // Per-host counters, when the run recorded two samples to derive rates from.
   const hostTraffic = live?.host_traffic_available ? (live.hosts ?? {}) : {};
 

@@ -17,7 +17,7 @@ import { useMemo } from "react";
 import { api } from "../api/client";
 import { useAsync } from "../hooks/useLive";
 import type {
-  Capabilities, DataSource, Decision, LiveSnapshot, RunSummary,
+  Capabilities, DataSource, Decision, LiveSnapshot, RunSummary, TopologyPayload,
 } from "../api/types";
 import type { PageId } from "../components/Shell";
 import {
@@ -44,8 +44,10 @@ export function OverviewView({
   // instead, not from the live feed.
   const historicalMetrics = useAsync(() => api.metricsLive(runId), [runId]);
   const historicalLatency = useAsync(() => api.latency(runId), [runId]);
+  const historicalEvents = useAsync(() => api.events(runId), [runId]);
   const metrics = runId ? historicalMetrics.data : snapshot?.metrics;
   const latency = runId ? historicalLatency.data : snapshot?.latency;
+  const events = runId ? historicalEvents.data?.events ?? [] : snapshot?.events ?? [];
   const values = metrics?.values ?? {};
 
   const runs = useAsync(() => api.runs(), [], 30000);
@@ -151,14 +153,16 @@ export function OverviewView({
           not a full-bleed canvas with panels floating on top of it. */}
       <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)] gap-6">
         <Card
-          icon={<StatusDot tone={active ? "ok" : "idle"} pulse={active} />}
+          icon={<StatusDot tone={active || runId ? "ok" : "idle"} pulse={active} />}
           title="Live topology"
           subtitle={active
             ? "4 hosts · 5 switches · two link-disjoint paths"
-            : "Configured topology — nothing running"}
+            : runId
+              ? "Forwarding state recorded for this run"
+              : "Configured topology — nothing running"}
           right={
             <div className="flex items-center gap-2.5">
-              <SourceBadge source={active ? "live" : "config"} />
+              <SourceBadge source={active ? "live" : runId ? "historical" : "config"} />
               <button
                 onClick={() => onNavigate("topology")}
                 className="t-small font-semibold underline underline-offset-2"
@@ -171,11 +175,11 @@ export function OverviewView({
           bodyClassName="p-0"
         >
           <div className="h-[clamp(380px,48vh,520px)]">
-            <TopologyCanvas snapshot={runId ? null : snapshot} compact />
+            <TopologyCanvas snapshot={runId ? null : snapshot} runId={runId} compact />
           </div>
         </Card>
 
-        <PathSummary snapshot={snapshot} />
+        <PathSummary snapshot={snapshot} runId={runId} />
       </section>
 
       {/* Three columns, widest to narrowest: the run log is a list people
@@ -229,7 +233,7 @@ export function OverviewView({
           <SectionTitle hint="Controller, routing and link events as they occur">
             Event feed
           </SectionTitle>
-          <EventTimeline snapshot={snapshot} active={active} />
+          <EventTimeline events={events} active={active} runId={runId} />
         </div>
       </section>
     </div>
@@ -521,25 +525,28 @@ function StatusBanner({
 }
 
 function EventTimeline({
-  snapshot, active,
+  events: rawEvents, active, runId,
 }: {
-  snapshot: LiveSnapshot | null;
+  events: { t: number | null; kind: string; detail: string }[];
   active: boolean;
+  runId?: string;
 }) {
-  const events = [...(snapshot?.events ?? [])].reverse();
+  const events = [...rawEvents].reverse();
 
   const toneFor = (kind: string): "ok" | "warn" | "bad" | "idle" => {
     if (kind.includes("down") || kind.includes("disconnect")) return "bad";
-    if (kind.includes("up") || kind.includes("connected")) return "ok";
+    if (kind.includes("up") || kind.includes("connected") || kind.includes("installed")) return "ok";
     if (kind.includes("flush") || kind.includes("removed")) return "warn";
     return "idle";
   };
+
+  const source = runId ? "historical" : active ? "live" : "unavailable";
 
   return (
     // No title here: the section heading above already names it, and two
     // headings one above the other read as two panels.
     <Card
-      right={<SourceBadge source={active ? "live" : "unavailable"} />}
+      right={<SourceBadge source={source} />}
       bodyClassName="p-0"
       className="flex-1 min-h-0"
     >
@@ -579,9 +586,11 @@ function EventTimeline({
         <div className="p-4">
           <Empty
             title="No events yet"
-            detail={active
-              ? "Switch connects, link changes and rule expiries will appear here."
-              : "Events are recorded while an experiment runs."}
+            detail={runId
+              ? "No controller events were recorded for this run."
+              : active
+                ? "Switch connects, link changes, new flow installations (table-miss responses) and rule expiries will appear here."
+                : "Events are recorded while an experiment runs."}
           />
         </div>
       )}
@@ -602,7 +611,14 @@ function RlSnapshot({
   runId?: string;
   onNavigate: (p: PageId) => void;
 }) {
-  const decisions = snapshot?.decisions ?? [];
+  // Same fix as the metrics/latency/events cards above: the live websocket
+  // snapshot is forced to null for a selected run, so a recorded run needs
+  // its own fetch or this card always reads "no decisions" even when the
+  // run's agent made hundreds of them.
+  const historicalDecisions = useAsync(() => api.decisions(runId, 60), [runId]);
+  const decisions = runId
+    ? historicalDecisions.data?.decisions ?? []
+    : snapshot?.decisions ?? [];
   const last: Decision | undefined = decisions[decisions.length - 1];
   const trend = decisions.slice(-20).map((d) => d.reward ?? 0);
   const source = runId ? "historical" : active ? "live" : "unavailable";
@@ -691,9 +707,11 @@ function RlSnapshot({
         <div className="p-4">
           <Empty
             title="No decisions yet"
-            detail={active
-              ? "The agent records one decision per polling interval."
-              : "Decisions are recorded while an experiment runs."}
+            detail={runId
+              ? "No decisions were recorded for this run — variant A has no learning agent, so this is expected for it."
+              : active
+                ? "The agent records one decision per polling interval."
+                : "Decisions are recorded while an experiment runs."}
           />
         </div>
       )}
@@ -703,10 +721,17 @@ function RlSnapshot({
 
 /** Forwarding evidence, in its own boxed card beside the topology rather than
     floated on top of it. */
-function PathSummary({ snapshot }: { snapshot: LiveSnapshot | null }) {
-  const paths = snapshot?.topology?.active_paths;
+function PathSummary({ snapshot, runId }: { snapshot: LiveSnapshot | null; runId?: string }) {
+  // Same fix as everywhere else on this page: the live websocket snapshot
+  // only ever carries the current experiment's topology, so a selected run
+  // needs its own fetch or this card silently reads "no forwarding data"
+  // for every recorded run, regardless of what it actually did.
+  const topo = useAsync<TopologyPayload>(() => api.topologyState(runId), [runId]);
+  const live = runId ? topo.data?.live : snapshot?.topology;
+  const paths = live?.active_paths;
   const counts = (paths?.rule_counts ?? {}) as Record<string, number>;
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const source = runId ? "historical" : "live";
 
   if (!paths?.available) {
     return (
@@ -722,7 +747,7 @@ function PathSummary({ snapshot }: { snapshot: LiveSnapshot | null }) {
   }
 
   return (
-    <Card title="Confirmed forwarding" right={<SourceBadge source="live" />}>
+    <Card title="Confirmed forwarding" right={<SourceBadge source={source} />}>
       <div className="space-y-3">
         {(["A", "B"] as const).map((p) => {
           const n = counts[p] ?? 0;
